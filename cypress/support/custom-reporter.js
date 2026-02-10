@@ -25,7 +25,9 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       endTime: null
     }
 
-    let currentSuite = null
+    let topLevelSuite = null
+    let currentContext = null
+    const suiteStack = []
 
     runner.on('start', () => {
       reportData.startTime = new Date()
@@ -34,60 +36,134 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     runner.on('suite', (suite) => {
       if (suite.root) return
       
-      reportData.totals.suites++
-      currentSuite = {
-        name: suite.fullTitle(),
-        tests: [],
-        stats: {
-          passes: 0,
-          failures: 0,
-          pending: 0,
-          skipped: 0,
-          total: 0
+      suiteStack.push(suite)
+      
+      // Top-level suite (describe)
+      if (suiteStack.length === 1) {
+        reportData.totals.suites++
+        topLevelSuite = {
+          name: suite.title,
+          contexts: [],
+          stats: {
+            passes: 0,
+            failures: 0,
+            pending: 0,
+            skipped: 0,
+            total: 0
+          }
         }
+        reportData.suites.push(topLevelSuite)
+        currentContext = null
       }
-      reportData.suites.push(currentSuite)
+      // Nested suite (context)
+      else if (suiteStack.length === 2 && topLevelSuite) {
+        currentContext = {
+          name: suite.title,
+          tests: [],
+          stats: {
+            passes: 0,
+            failures: 0,
+            pending: 0,
+            skipped: 0,
+            total: 0
+          }
+        }
+        topLevelSuite.contexts.push(currentContext)
+      }
+    })
+
+    runner.on('suite end', (suite) => {
+      if (suite.root) return
+      suiteStack.pop()
+      
+      if (suiteStack.length === 0) {
+        topLevelSuite = null
+        currentContext = null
+      } else if (suiteStack.length === 1) {
+        currentContext = null
+      }
     })
 
     runner.on('pass', (test) => {
-      if (currentSuite) {
-        currentSuite.tests.push({
-          name: test.title,
-          status: 'PASS',
-          duration: test.duration
-        })
-        currentSuite.stats.passes++
-        currentSuite.stats.total++
+      const testData = {
+        name: test.title,
+        status: 'PASS',
+        duration: test.duration
       }
+      
+      if (currentContext) {
+        // Test under context
+        currentContext.tests.push(testData)
+        currentContext.stats.passes++
+        currentContext.stats.total++
+      } else if (topLevelSuite) {
+        // Test directly under suite (no context)
+        if (!topLevelSuite.tests) {
+          topLevelSuite.tests = []
+        }
+        topLevelSuite.tests.push(testData)
+      }
+      
+      if (topLevelSuite) {
+        topLevelSuite.stats.passes++
+        topLevelSuite.stats.total++
+      }
+      
       reportData.totals.passes++
       reportData.totals.tests++
     })
 
     runner.on('fail', (test) => {
-      if (currentSuite) {
-        currentSuite.tests.push({
-          name: test.title,
-          status: 'FAIL',
-          duration: test.duration,
-          error: test.err.message
-        })
-        currentSuite.stats.failures++
-        currentSuite.stats.total++
+      const testData = {
+        name: test.title,
+        status: 'FAIL',
+        duration: test.duration,
+        error: test.err.message
       }
+      
+      if (currentContext) {
+        currentContext.tests.push(testData)
+        currentContext.stats.failures++
+        currentContext.stats.total++
+      } else if (topLevelSuite) {
+        if (!topLevelSuite.tests) {
+          topLevelSuite.tests = []
+        }
+        topLevelSuite.tests.push(testData)
+      }
+      
+      if (topLevelSuite) {
+        topLevelSuite.stats.failures++
+        topLevelSuite.stats.total++
+      }
+      
       reportData.totals.failures++
       reportData.totals.tests++
     })
 
     runner.on('pending', (test) => {
-      if (currentSuite) {
-        currentSuite.tests.push({
-          name: test.title,
-          status: 'SKIP',
-          duration: 0
-        })
-        currentSuite.stats.pending++
-        currentSuite.stats.total++
+      const testData = {
+        name: test.title,
+        status: 'SKIP',
+        duration: 0
       }
+      
+      if (currentContext) {
+        currentContext.tests.push(testData)
+        currentContext.stats.pending++
+        currentContext.stats.total++
+      } else if (topLevelSuite) {
+        if (!topLevelSuite.tests) {
+          topLevelSuite.tests = []
+        }
+        topLevelSuite.tests.push(testData)
+      }
+      
+      if (topLevelSuite) {
+        topLevelSuite.stats.pending++
+        topLevelSuite.stats.total++
+      }
+      
       reportData.totals.pending++
       reportData.totals.tests++
     })
@@ -613,6 +689,33 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     .spec-runs-info strong {
       color: #2d3748;
     }
+    
+    .context-row {
+      background: #edf2f7 !important;
+      font-weight: 700;
+    }
+    
+    .context-name {
+      color: #2d3748;
+      font-size: 15px;
+      padding: 16px 20px !important;
+      border-top: 2px solid #cbd5e0;
+      border-bottom: 2px solid #cbd5e0;
+    }
+    
+    .subtest-row {
+      background: #f7fafc;
+    }
+    
+    .subtest-row:hover {
+      background: #edf2f7 !important;
+    }
+    
+    .subtest-name {
+      padding-left: 40px !important;
+      color: #4a5568;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -752,27 +855,75 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       lines.push(`Total Tests: ${suite.stats.total} | Pass: ${suite.stats.passes} | Fail: ${suite.stats.failures} | Skip: ${suite.stats.pending}`)
       lines.push('')
 
-      // Test Cases Table Header
-      lines.push(this.padRight('Test Case Name', 80) + this.padRight('Status', 15) + this.padRight('Duration', 15))
-      lines.push('-'.repeat(80) + '-'.repeat(15) + '-'.repeat(15))
+      // Check if suite has contexts (hierarchical structure)
+      if (suite.contexts && suite.contexts.length > 0) {
+        // Hierarchical structure: contexts with tests
+        suite.contexts.forEach((context) => {
+          lines.push(`  Context: ${context.name}`)
+          lines.push(`  ${'-'.repeat(78)}`)
+          lines.push(this.padRight('    Sub-Test Case Name', 80) + this.padRight('Status', 15) + this.padRight('Duration', 15))
+          
+          context.tests.forEach((test) => {
+            const statusIcon = test.status === 'PASS' ? '✓' : test.status === 'FAIL' ? '✗' : '⊘'
+            const status = `${statusIcon} ${test.status}`
+            const duration = test.duration ? `${test.duration}ms` : 'N/A'
+            
+            lines.push(
+              this.padRight(`      ${test.name}`, 80) +
+              this.padRight(status, 15) +
+              this.padRight(duration, 15)
+            )
 
-      // Test Cases
-      suite.tests.forEach((test) => {
-        const statusIcon = test.status === 'PASS' ? '✓' : test.status === 'FAIL' ? '✗' : '⊘'
-        const status = `${statusIcon} ${test.status}`
-        const duration = test.duration ? `${test.duration}ms` : 'N/A'
+            if (test.status === 'FAIL' && test.error) {
+              lines.push(`        Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
+            }
+          })
+          lines.push('')
+        })
         
-        lines.push(
-          this.padRight(`  ${test.name}`, 80) +
-          this.padRight(status, 15) +
-          this.padRight(duration, 15)
-        )
+        // Direct tests under suite (if any)
+        if (suite.tests && suite.tests.length > 0) {
+          lines.push(this.padRight('  Test Case Name', 80) + this.padRight('Status', 15) + this.padRight('Duration', 15))
+          lines.push('-'.repeat(80) + '-'.repeat(15) + '-'.repeat(15))
+          
+          suite.tests.forEach((test) => {
+            const statusIcon = test.status === 'PASS' ? '✓' : test.status === 'FAIL' ? '✗' : '⊘'
+            const status = `${statusIcon} ${test.status}`
+            const duration = test.duration ? `${test.duration}ms` : 'N/A'
+            
+            lines.push(
+              this.padRight(`    ${test.name}`, 80) +
+              this.padRight(status, 15) +
+              this.padRight(duration, 15)
+            )
 
-        // Add error message if test failed
-        if (test.status === 'FAIL' && test.error) {
-          lines.push(`    Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
+            if (test.status === 'FAIL' && test.error) {
+              lines.push(`      Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
+            }
+          })
         }
-      })
+      } else {
+        // Flat structure (no contexts)
+        lines.push(this.padRight('  Test Case Name', 80) + this.padRight('Status', 15) + this.padRight('Duration', 15))
+        lines.push('-'.repeat(80) + '-'.repeat(15) + '-'.repeat(15))
+
+        const tests = suite.tests || []
+        tests.forEach((test) => {
+          const statusIcon = test.status === 'PASS' ? '✓' : test.status === 'FAIL' ? '✗' : '⊘'
+          const status = `${statusIcon} ${test.status}`
+          const duration = test.duration ? `${test.duration}ms` : 'N/A'
+          
+          lines.push(
+            this.padRight(`    ${test.name}`, 80) +
+            this.padRight(status, 15) +
+            this.padRight(duration, 15)
+          )
+
+          if (test.status === 'FAIL' && test.error) {
+            lines.push(`      Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
+          }
+        })
+      }
 
       lines.push('')
       lines.push('')
@@ -789,14 +940,33 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     const lines = []
 
     // Header
-    lines.push('Suite Name,Test Case Name,Status,Duration (ms),Error Message')
+    lines.push('Suite Name,Test Case / Context,Sub-Test,Status,Duration (ms),Error Message')
 
     // Data rows
     data.suites.forEach((suite) => {
-      suite.tests.forEach((test) => {
-        const error = test.error ? `"${test.error.replace(/"/g, '""')}"` : ''
-        lines.push(`"${suite.name}","${test.name}",${test.status},${test.duration || 0},${error}`)
-      })
+      // Check if suite has contexts (hierarchical structure)
+      if (suite.contexts && suite.contexts.length > 0) {
+        suite.contexts.forEach((context) => {
+          context.tests.forEach((test) => {
+            const error = test.error ? `"${test.error.replace(/"/g, '""')}"` : ''
+            lines.push(`"${suite.name}","${context.name}","${test.name}",${test.status},${test.duration || 0},${error}`)
+          })
+        })
+        // Direct tests under suite (if any)
+        if (suite.tests && suite.tests.length > 0) {
+          suite.tests.forEach((test) => {
+            const error = test.error ? `"${test.error.replace(/"/g, '""')}"` : ''
+            lines.push(`"${suite.name}","","${test.name}",${test.status},${test.duration || 0},${error}`)
+          })
+        }
+      } else {
+        // Flat structure (no contexts)
+        const tests = suite.tests || []
+        tests.forEach((test) => {
+          const error = test.error ? `"${test.error.replace(/"/g, '""')}"` : ''
+          lines.push(`"${suite.name}","${test.name}","",${test.status},${test.duration || 0},${error}`)
+        })
+      }
     })
 
     // Summary rows
@@ -952,6 +1122,33 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     
     .summary-card.rate { border-top: 4px solid #9f7aea; }
     .summary-card.rate .summary-card-value { color: #9f7aea; }
+    
+    .context-row {
+      background: #edf2f7 !important;
+      font-weight: 700;
+    }
+    
+    .context-name {
+      color: #2d3748;
+      font-size: 15px;
+      padding: 16px 20px !important;
+      border-top: 2px solid #cbd5e0;
+      border-bottom: 2px solid #cbd5e0;
+    }
+    
+    .subtest-row {
+      background: #f7fafc;
+    }
+    
+    .subtest-row:hover {
+      background: #edf2f7 !important;
+    }
+    
+    .subtest-name {
+      padding-left: 40px !important;
+      color: #4a5568;
+      font-size: 13px;
+    }
     
     .content {
       padding: 30px 40px;
@@ -1284,24 +1481,116 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       }
     }
     
-    const testsHTML = suite.tests.map(test => {
-      const errorHTML = test.status === 'FAIL' && test.error 
-        ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
-        : ''
-      
-      return `
-        <tr>
-          <td class="test-name">${this.escapeHtml(test.name)}</td>
-          <td>
-            <span class="status status-${test.status.toLowerCase()}">
-              ${statusIcon(test.status)} ${test.status}
-            </span>
-          </td>
-          <td class="duration">${test.duration ? test.duration + 'ms' : 'N/A'}</td>
-        </tr>
-        ${errorHTML}
+    // Check if suite has contexts (hierarchical structure)
+    const hasContexts = suite.contexts && suite.contexts.length > 0
+    
+    let bodyHTML = ''
+    
+    if (hasContexts) {
+      // Hierarchical structure: suite > contexts > tests
+      bodyHTML = `
+        <table class="tests-table">
+          <thead>
+            <tr>
+              <th>Test Case / Sub-Test</th>
+              <th>Status</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
       `
-    }).join('')
+      
+      suite.contexts.forEach(context => {
+        // Context row (Test Case)
+        bodyHTML += `
+            <tr class="context-row">
+              <td colspan="3" class="context-name">${this.escapeHtml(context.name)}</td>
+            </tr>
+        `
+        
+        // Tests under context (Sub-Test Cases)
+        context.tests.forEach(test => {
+          const errorHTML = test.status === 'FAIL' && test.error 
+            ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
+            : ''
+          
+          bodyHTML += `
+            <tr class="subtest-row">
+              <td class="test-name subtest-name">↳ ${this.escapeHtml(test.name)}</td>
+              <td>
+                <span class="status status-${test.status.toLowerCase()}">
+                  ${statusIcon(test.status)} ${test.status}
+                </span>
+              </td>
+              <td class="duration">${test.duration ? test.duration + 'ms' : 'N/A'}</td>
+            </tr>
+            ${errorHTML}
+          `
+        })
+      })
+      
+      // Direct tests under suite (if any)
+      if (suite.tests && suite.tests.length > 0) {
+        suite.tests.forEach(test => {
+          const errorHTML = test.status === 'FAIL' && test.error 
+            ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
+            : ''
+          
+          bodyHTML += `
+            <tr>
+              <td class="test-name">${this.escapeHtml(test.name)}</td>
+              <td>
+                <span class="status status-${test.status.toLowerCase()}">
+                  ${statusIcon(test.status)} ${test.status}
+                </span>
+              </td>
+              <td class="duration">${test.duration ? test.duration + 'ms' : 'N/A'}</td>
+            </tr>
+            ${errorHTML}
+          `
+        })
+      }
+      
+      bodyHTML += `
+          </tbody>
+        </table>
+      `
+    } else {
+      // Flat structure: suite > tests (no contexts)
+      const testsHTML = (suite.tests || []).map(test => {
+        const errorHTML = test.status === 'FAIL' && test.error 
+          ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
+          : ''
+        
+        return `
+          <tr>
+            <td class="test-name">${this.escapeHtml(test.name)}</td>
+            <td>
+              <span class="status status-${test.status.toLowerCase()}">
+                ${statusIcon(test.status)} ${test.status}
+              </span>
+            </td>
+            <td class="duration">${test.duration ? test.duration + 'ms' : 'N/A'}</td>
+          </tr>
+          ${errorHTML}
+        `
+      }).join('')
+      
+      bodyHTML = `
+        <table class="tests-table">
+          <thead>
+            <tr>
+              <th>Test Case Name</th>
+              <th>Status</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${testsHTML}
+          </tbody>
+        </table>
+      `
+    }
     
     return `
       <div class="suite" id="suite-${index}">
@@ -1318,18 +1607,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           </div>
         </div>
         <div class="suite-body">
-          <table class="tests-table">
-            <thead>
-              <tr>
-                <th>Test Case Name</th>
-                <th>Status</th>
-                <th>Duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${testsHTML}
-            </tbody>
-          </table>
+          ${bodyHTML}
         </div>
       </div>
     `
