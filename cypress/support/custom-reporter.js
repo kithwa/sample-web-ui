@@ -157,13 +157,17 @@ class CustomTabularReporter extends mocha.reporters.Spec {
             const reportData = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
             allReports.push({
               folder: entry.name,
-              data: reportData
+              data: reportData,
+              timestamp: new Date(reportData.startTime)
             })
           }
         }
       }
 
       if (allReports.length === 0) return
+
+      // Sort reports by execution time (chronological order)
+      allReports.sort((a, b) => a.timestamp - b.timestamp)
 
       // Combine all reports into one
       const consolidatedData = {
