@@ -745,10 +745,6 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     <div class="summary">
       <h2>Overall Summary (All Test Runs)</h2>
       <div class="summary-grid">
-        <div class="summary-card runs">
-          <div class="summary-card-value">${data.reports.length}</div>
-          <div class="summary-card-label">Spec Runs</div>
-        </div>
         <div class="summary-card total">
           <div class="summary-card-value">${data.totals.suites}</div>
           <div class="summary-card-label">Test Suites</div>
@@ -759,15 +755,15 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         </div>
         <div class="summary-card passed">
           <div class="summary-card-value">${data.totals.passes}</div>
-          <div class="summary-card-label">Passed</div>
+          <div class="summary-card-label">TOTAL PASS</div>
         </div>
         <div class="summary-card failed">
           <div class="summary-card-value">${data.totals.failures}</div>
-          <div class="summary-card-label">Failed</div>
+          <div class="summary-card-label">TOTAL FAIL</div>
         </div>
         <div class="summary-card skipped">
           <div class="summary-card-value">${data.totals.pending}</div>
-          <div class="summary-card-label">Skipped</div>
+          <div class="summary-card-label">TOTAL BLOCK</div>
         </div>
         <div class="summary-card rate">
           <div class="summary-card-value">${successRate}%</div>
@@ -1416,15 +1412,15 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         </div>
         <div class="summary-card passed">
           <div class="summary-card-value">${data.totals.passes}</div>
-          <div class="summary-card-label">Passed</div>
+          <div class="summary-card-label">TOTAL PASS</div>
         </div>
         <div class="summary-card failed">
           <div class="summary-card-value">${data.totals.failures}</div>
-          <div class="summary-card-label">Failed</div>
+          <div class="summary-card-label">TOTAL FAIL</div>
         </div>
         <div class="summary-card skipped">
           <div class="summary-card-value">${data.totals.pending}</div>
-          <div class="summary-card-label">Skipped</div>
+          <div class="summary-card-label">TOTAL BLOCK</div>
         </div>
         <div class="summary-card rate">
           <div class="summary-card-value">${successRate}%</div>
