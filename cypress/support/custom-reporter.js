@@ -35,9 +35,9 @@ class CustomTabularReporter extends mocha.reporters.Spec {
 
     runner.on('suite', (suite) => {
       if (suite.root) return
-
+      
       suiteStack.push(suite)
-
+      
       // Top-level suite (describe)
       if (suiteStack.length === 1) {
         reportData.totals.suites++
@@ -75,7 +75,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     runner.on('suite end', (suite) => {
       if (suite.root) return
       suiteStack.pop()
-
+      
       if (suiteStack.length === 0) {
         topLevelSuite = null
         currentContext = null
@@ -90,7 +90,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         status: 'PASS',
         duration: test.duration
       }
-
+      
       if (currentContext) {
         // Test under context
         currentContext.tests.push(testData)
@@ -103,12 +103,12 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         }
         topLevelSuite.tests.push(testData)
       }
-
+      
       if (topLevelSuite) {
         topLevelSuite.stats.passes++
         topLevelSuite.stats.total++
       }
-
+      
       reportData.totals.passes++
       reportData.totals.tests++
     })
@@ -120,7 +120,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         duration: test.duration,
         error: test.err.message
       }
-
+      
       if (currentContext) {
         currentContext.tests.push(testData)
         currentContext.stats.failures++
@@ -131,12 +131,12 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         }
         topLevelSuite.tests.push(testData)
       }
-
+      
       if (topLevelSuite) {
         topLevelSuite.stats.failures++
         topLevelSuite.stats.total++
       }
-
+      
       reportData.totals.failures++
       reportData.totals.tests++
     })
@@ -147,7 +147,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         status: 'SKIP',
         duration: 0
       }
-
+      
       if (currentContext) {
         currentContext.tests.push(testData)
         currentContext.stats.pending++
@@ -158,12 +158,12 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         }
         topLevelSuite.tests.push(testData)
       }
-
+      
       if (topLevelSuite) {
         topLevelSuite.stats.pending++
         topLevelSuite.stats.total++
       }
-
+      
       reportData.totals.pending++
       reportData.totals.tests++
     })
@@ -177,17 +177,12 @@ class CustomTabularReporter extends mocha.reporters.Spec {
   generateReport(data, options) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
     const baseReportDir = options.reporterOptions?.reportDir || 'cypress/reports'
-
+    
     // Get spec file name from first suite or use default
-    const specName =
-      data.suites.length > 0
-        ? data.suites[0].name
-            .split(/[\/\\]/)
-            .pop()
-            .replace(/[^a-zA-Z0-9]/g, '-')
-            .toLowerCase()
-        : 'test'
-
+    const specName = data.suites.length > 0 
+      ? data.suites[0].name.split(/[\/\\]/).pop().replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()
+      : 'test'
+    
     // Create subfolder for this spec file run
     const reportSubDir = path.join(baseReportDir, `${specName}-${timestamp}`)
     const reportName = 'report'
@@ -220,7 +215,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     console.log(`   - JSON Report: ${path.join(reportSubDir, `${reportName}.json`)}`)
     console.log(`   - HTML Report: ${path.join(reportSubDir, `${reportName}.html`)}`)
     console.log('='.repeat(100) + '\n')
-
+    
     // Try to generate consolidated report (will aggregate all runs)
     this.generateConsolidatedReport(baseReportDir)
   }
@@ -230,7 +225,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       // Find all JSON report files in subdirectories
       const allReports = []
       const entries = fs.readdirSync(baseReportDir, { withFileTypes: true })
-
+      
       for (const entry of entries) {
         if (entry.isDirectory()) {
           const jsonPath = path.join(baseReportDir, entry.name, 'report.json')
@@ -261,9 +256,9 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           pending: 0,
           skipped: 0
         },
-        startTime: new Date(Math.min(...allReports.map((r) => new Date(r.data.startTime)))),
-        endTime: new Date(Math.max(...allReports.map((r) => new Date(r.data.endTime)))),
-        reports: allReports.map((r) => r.folder)
+        startTime: new Date(Math.min(...allReports.map(r => new Date(r.data.startTime)))),
+        endTime: new Date(Math.max(...allReports.map(r => new Date(r.data.endTime)))),
+        reports: allReports.map(r => r.folder)
       }
 
       // Aggregate all suites and totals
@@ -280,7 +275,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       // Generate consolidated HTML report
       const consolidatedHTML = this.generateConsolidatedHTMLReport(consolidatedData)
       fs.writeFileSync(path.join(baseReportDir, 'consolidated-report.html'), consolidatedHTML)
-
+      
       // Generate consolidated JSON
       fs.writeFileSync(path.join(baseReportDir, 'consolidated-report.json'), JSON.stringify(consolidatedData, null, 2))
 
@@ -298,7 +293,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
   generateConsolidatedHTMLReport(data) {
     const duration = ((data.endTime - data.startTime) / 1000).toFixed(2)
     const successRate = data.totals.tests > 0 ? ((data.totals.passes / data.totals.tests) * 100).toFixed(2) : '0.00'
-
+    
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -814,7 +809,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
   </script>
 </body>
 </html>`
-
+    
     return html
   }
 
@@ -853,9 +848,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     data.suites.forEach((suite, index) => {
       lines.push(`Suite ${index + 1}: ${suite.name}`)
       lines.push(subDivider)
-      lines.push(
-        `Total Tests: ${suite.stats.total} | Pass: ${suite.stats.passes} | Fail: ${suite.stats.failures} | Skip: ${suite.stats.pending}`
-      )
+      lines.push(`Total Tests: ${suite.stats.total} | Pass: ${suite.stats.passes} | Fail: ${suite.stats.failures} | Skip: ${suite.stats.pending}`)
       lines.push('')
 
       // Check if suite has contexts (hierarchical structure)
@@ -864,17 +857,17 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         suite.contexts.forEach((context) => {
           lines.push(`  Context: ${context.name}`)
           lines.push(`  ${'-'.repeat(78)}`)
-          lines.push(
-            this.padRight('    Sub-Test Case Name', 80) + this.padRight('Status', 15) + this.padRight('Duration', 15)
-          )
-
+          lines.push(this.padRight('    Sub-Test Case Name', 80) + this.padRight('Status', 15) + this.padRight('Duration', 15))
+          
           context.tests.forEach((test) => {
             const statusIcon = test.status === 'PASS' ? '✓' : test.status === 'FAIL' ? '✗' : '⊘'
             const status = `${statusIcon} ${test.status}`
             const duration = test.duration ? `${test.duration}ms` : 'N/A'
-
+            
             lines.push(
-              this.padRight(`      ${test.name}`, 80) + this.padRight(status, 15) + this.padRight(duration, 15)
+              this.padRight(`      ${test.name}`, 80) +
+              this.padRight(status, 15) +
+              this.padRight(duration, 15)
             )
 
             if (test.status === 'FAIL' && test.error) {
@@ -883,20 +876,22 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           })
           lines.push('')
         })
-
+        
         // Direct tests under suite (if any)
         if (suite.tests && suite.tests.length > 0) {
-          lines.push(
-            this.padRight('  Test Case Name', 80) + this.padRight('Status', 15) + this.padRight('Duration', 15)
-          )
+          lines.push(this.padRight('  Test Case Name', 80) + this.padRight('Status', 15) + this.padRight('Duration', 15))
           lines.push('-'.repeat(80) + '-'.repeat(15) + '-'.repeat(15))
-
+          
           suite.tests.forEach((test) => {
             const statusIcon = test.status === 'PASS' ? '✓' : test.status === 'FAIL' ? '✗' : '⊘'
             const status = `${statusIcon} ${test.status}`
             const duration = test.duration ? `${test.duration}ms` : 'N/A'
-
-            lines.push(this.padRight(`    ${test.name}`, 80) + this.padRight(status, 15) + this.padRight(duration, 15))
+            
+            lines.push(
+              this.padRight(`    ${test.name}`, 80) +
+              this.padRight(status, 15) +
+              this.padRight(duration, 15)
+            )
 
             if (test.status === 'FAIL' && test.error) {
               lines.push(`      Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
@@ -913,8 +908,12 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           const statusIcon = test.status === 'PASS' ? '✓' : test.status === 'FAIL' ? '✗' : '⊘'
           const status = `${statusIcon} ${test.status}`
           const duration = test.duration ? `${test.duration}ms` : 'N/A'
-
-          lines.push(this.padRight(`    ${test.name}`, 80) + this.padRight(status, 15) + this.padRight(duration, 15))
+          
+          lines.push(
+            this.padRight(`    ${test.name}`, 80) +
+            this.padRight(status, 15) +
+            this.padRight(duration, 15)
+          )
 
           if (test.status === 'FAIL' && test.error) {
             lines.push(`      Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
@@ -982,7 +981,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
   generateHTMLReport(data) {
     const duration = ((data.endTime - data.startTime) / 1000).toFixed(2)
     const successRate = ((data.totals.passes / data.totals.tests) * 100).toFixed(2)
-
+    
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1464,29 +1463,25 @@ class CustomTabularReporter extends mocha.reporters.Spec {
   </script>
 </body>
 </html>`
-
+    
     return html
   }
 
   generateSuiteHTML(suite, index) {
     const statusIcon = (status) => {
-      switch (status) {
-        case 'PASS':
-          return '✓'
-        case 'FAIL':
-          return '✗'
-        case 'SKIP':
-          return '⊘'
-        default:
-          return '?'
+      switch(status) {
+        case 'PASS': return '✓'
+        case 'FAIL': return '✗'
+        case 'SKIP': return '⊘'
+        default: return '?'
       }
     }
-
+    
     // Check if suite has contexts (hierarchical structure)
     const hasContexts = suite.contexts && suite.contexts.length > 0
-
+    
     let bodyHTML = ''
-
+    
     if (hasContexts) {
       // Hierarchical structure: suite > contexts > tests
       bodyHTML = `
@@ -1500,22 +1495,21 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           </thead>
           <tbody>
       `
-
-      suite.contexts.forEach((context) => {
+      
+      suite.contexts.forEach(context => {
         // Context row (Test Case)
         bodyHTML += `
             <tr class="context-row">
               <td colspan="3" class="context-name">${this.escapeHtml(context.name)}</td>
             </tr>
         `
-
+        
         // Tests under context (Sub-Test Cases)
-        context.tests.forEach((test) => {
-          const errorHTML =
-            test.status === 'FAIL' && test.error
-              ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
-              : ''
-
+        context.tests.forEach(test => {
+          const errorHTML = test.status === 'FAIL' && test.error 
+            ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
+            : ''
+          
           bodyHTML += `
             <tr class="subtest-row">
               <td class="test-name subtest-name">↳ ${this.escapeHtml(test.name)}</td>
@@ -1530,15 +1524,14 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           `
         })
       })
-
+      
       // Direct tests under suite (if any)
       if (suite.tests && suite.tests.length > 0) {
-        suite.tests.forEach((test) => {
-          const errorHTML =
-            test.status === 'FAIL' && test.error
-              ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
-              : ''
-
+        suite.tests.forEach(test => {
+          const errorHTML = test.status === 'FAIL' && test.error 
+            ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
+            : ''
+          
           bodyHTML += `
             <tr>
               <td class="test-name">${this.escapeHtml(test.name)}</td>
@@ -1553,21 +1546,19 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           `
         })
       }
-
+      
       bodyHTML += `
           </tbody>
         </table>
       `
     } else {
       // Flat structure: suite > tests (no contexts)
-      const testsHTML = (suite.tests || [])
-        .map((test) => {
-          const errorHTML =
-            test.status === 'FAIL' && test.error
-              ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
-              : ''
-
-          return `
+      const testsHTML = (suite.tests || []).map(test => {
+        const errorHTML = test.status === 'FAIL' && test.error 
+          ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
+          : ''
+        
+        return `
           <tr>
             <td class="test-name">${this.escapeHtml(test.name)}</td>
             <td>
@@ -1579,9 +1570,8 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           </tr>
           ${errorHTML}
         `
-        })
-        .join('')
-
+      }).join('')
+      
       bodyHTML = `
         <table class="tests-table">
           <thead>
@@ -1597,7 +1587,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         </table>
       `
     }
-
+    
     return `
       <div class="suite" id="suite-${index}">
         <div class="suite-header" onclick="toggleSuite(${index})">
@@ -1627,7 +1617,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       '"': '&quot;',
       "'": '&#039;'
     }
-    return text.replace(/[&<>"']/g, (m) => map[m])
+    return text.replace(/[&<>"']/g, m => map[m])
   }
 
   padRight(str, length) {
