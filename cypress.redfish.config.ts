@@ -34,18 +34,20 @@ export default defineConfig({
 
   env: {
     // Base URL of the Redfish server (matches Postman test environment port)
-    REDFISH_BASEURL: 'http://localhost:8181',
+    REDFISH_BASEURL: 'https://localhost:8181',
     // Credentials for Basic Auth and POST /redfish/v1/SessionService/Sessions
     REDFISH_USERNAME: 'standalone',
     REDFISH_PASSWORD: 'G@ppm0ym',
     // Optional: a real registered AMT device UUID for Systems tests.
     // If not set, device-specific tests gracefully accept 404.
-    REDFISH_SYSTEM_ID: ''
+    REDFISH_SYSTEM_ID: '15ccd72c-46ac-4991-a8d1-ef2e89e3a453'
   },
 
   // API-only tests: no browser launch strictly needed, but Cypress still
   // requires a browser context. Tests run headlessly via electron.
   chromeWebSecurity: false,
+  // Allow self-signed TLS certificates from the console backend
+  rejectUnauthorized: false,
 
   e2e: {
     // Run specs under integration-redfish/ (alongside the original integration/ folder)
