@@ -15,9 +15,11 @@
  */
 
 const TEST_SYSTEM_ID = '550e8400-e29b-41d4-a716-446655440001'
+const NON_EXISTENT_SYSTEM_ID = '00000000-0000-0000-0000-000000000000'
 
 const systemsFixtures = {
   testSystemId: TEST_SYSTEM_ID,
+  nonExistentSystemId: NON_EXISTENT_SYSTEM_ID,
 
   collection: {
     success: {
@@ -31,22 +33,45 @@ const systemsFixtures = {
     }
   },
 
+  // Valid enum values per DMTF Redfish specification
+  validPowerStates: ['On', 'Off', 'PoweringOn', 'PoweringOff'],
+  validSystemTypes: ['Physical', 'Virtual', 'OS', 'PhysicallyPartitioned', 'VirtuallyPartitioned'],
+  validStatusStates: [
+    'Enabled', 'Disabled', 'StandbyOffline', 'StandbySpare', 'InTest',
+    'Starting', 'Absent', 'UnavailableOffline', 'Deferring', 'Quiesced',
+    'Updating', 'Degraded'
+  ],
+  validHealthValues: ['OK', 'Warning', 'Critical'],
+  validMemoryMirroring: ['System', 'DIMM', 'Hybrid', 'None'],
+
   reset: {
-    request: {
-      ResetType: 'GracefulShutdown'
-    },
-    invalidResetType: {
-      ResetType: 'NotARealResetType'
-    },
+    // All ResetTypes supported by the implementation
+    request: { ResetType: 'GracefulShutdown' },
+    on: { ResetType: 'On' },
+    forceOff: { ResetType: 'ForceOff' },
+    forceRestart: { ResetType: 'ForceRestart' },
+    gracefulRestart: { ResetType: 'GracefulRestart' },
+    powerCycle: { ResetType: 'PowerCycle' },
+    // Error cases
+    invalidResetType: { ResetType: 'NotARealResetType' },
     missingResetType: {}
   },
 
   patchBootSettings: {
+    // Valid boot settings variants
     request: {
-      Boot: {
-        BootSourceOverrideEnabled: 'Once',
-        BootSourceOverrideTarget: 'Pxe'
-      }
+      Boot: { BootSourceOverrideEnabled: 'Once', BootSourceOverrideTarget: 'Pxe' }
+    },
+    biosSetup: {
+      Boot: { BootSourceOverrideEnabled: 'Once', BootSourceOverrideTarget: 'BiosSetup' }
+    },
+    empty: {},
+    // Invalid settings — should return 400
+    invalidTarget: {
+      Boot: { BootSourceOverrideEnabled: 'Once', BootSourceOverrideTarget: 'InvalidBootTarget' }
+    },
+    invalidEnabled: {
+      Boot: { BootSourceOverrideEnabled: 'Always', BootSourceOverrideTarget: 'Pxe' }
     }
   }
 }
