@@ -318,3 +318,129 @@ describe('Redfish Individual Session', () => {
     })
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Token and session lifecycle edge cases
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Redfish Session - Token Edge Cases', () => {
+  it('returns 401 when X-Auth-Token is invalid/garbage', () => {
+    cy.request({
+      method: 'GET',
+      url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
+      headers: { 'X-Auth-Token': 'invalid-token-that-does-not-exist-12345' },
+      failOnStatusCode: false
+    }).then((response) => {
+      expect(response.status).to.eq(httpCodes.UNAUTHORIZED)
+      expect(response.body).to.have.property('error')
+    })
+  })
+
+  it('deleted session token returns 401 or 404 on subsequent GET', () => {
+    let deletedToken: string
+    let deletedSessionId: string
+
+    // Create a session
+    cy.request({
+      method: 'POST',
+      url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
+      body: sessionFixtures.validCredentials.request,
+      failOnStatusCode: false
+    }).then((response) => {
+      if (response.status === httpCodes.CREATED) {
+        deletedToken = response.headers['x-auth-token'] as string
+        deletedSessionId = response.body.Id as string
+
+        // Delete the session
+        cy.request({
+          method: 'DELETE',
+          url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/${deletedSessionId}`,
+          headers: { 'X-Auth-Token': deletedToken },
+          failOnStatusCode: false
+        }).then((delResponse) => {
+          expect(delResponse.status).to.eq(httpCodes.NO_CONTENT)
+
+          // Now use the deleted token — should be 401 or 404
+          cy.request({
+            method: 'GET',
+            url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/${deletedSessionId}`,
+            headers: { 'X-Auth-Token': deletedToken },
+            failOnStatusCode: false
+          }).then((getResponse) => {
+            expect(getResponse.status).to.be.oneOf([httpCodes.UNAUTHORIZED, 404])
+            expect(getResponse.body).to.have.property('error')
+          })
+        })
+      }
+    })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SessionService resource — additional property checks
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Redfish SessionService - Additional Properties', () => {
+  it('GET SessionService returns ServiceEnabled: true', () => {
+    cy.request({
+      method: 'GET',
+      url: `${redfishUrl()}/redfish/v1/SessionService`,
+      headers: basicAuthHeaders(),
+      failOnStatusCode: false
+    }).then((response) => {
+      expect(response.status).to.eq(httpCodes.SUCCESS)
+      expect(response.body).to.have.property('ServiceEnabled', true)
+    })
+  })
+
+  it('GET Sessions collection has Members@odata.count >= 0', () => {
+    cy.request({
+      method: 'GET',
+      url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
+      headers: basicAuthHeaders(),
+      failOnStatusCode: false
+    }).then((response) => {
+      expect(response.status).to.eq(httpCodes.SUCCESS)
+      expect(response.body['Members@odata.count']).to.be.a('number')
+      expect(response.body['Members@odata.count']).to.be.at.least(0)
+      if ((response.body['Members@odata.count'] as number) > 0) {
+        const members = response.body.Members as Array<{ '@odata.id': string }>
+        expect(members[0]).to.have.property('@odata.id')
+        expect(members[0]['@odata.id']).to.include('/redfish/v1/SessionService/Sessions/')
+      }
+    })
+  })
+
+  it('POST /redfish/v1/SessionService returns 405 Method Not Allowed', () => {
+    cy.request({
+      method: 'POST',
+      url: `${redfishUrl()}/redfish/v1/SessionService`,
+      headers: basicAuthHeaders(),
+      body: {},
+      failOnStatusCode: false
+    }).then((response) => {
+      expect(response.status).to.eq(405)
+      expect(response.body).to.have.property('error')
+    })
+  })
+
+  it('OData-Version header is 4.0 on POST Sessions response', () => {
+    cy.request({
+      method: 'POST',
+      url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
+      body: sessionFixtures.validCredentials.request,
+      failOnStatusCode: false
+    }).then((loginResponse) => {
+      expect(loginResponse.status).to.eq(httpCodes.CREATED)
+      expect(loginResponse.headers['odata-version']).to.eq('4.0')
+
+      // Cleanup: delete the session we just created
+      const token = loginResponse.headers['x-auth-token'] as string
+      const sid = loginResponse.body.Id as string
+      cy.request({
+        method: 'DELETE',
+        url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/${sid}`,
+        headers: { 'X-Auth-Token': token },
+        failOnStatusCode: false
+      })
+    })
+  })
+})
