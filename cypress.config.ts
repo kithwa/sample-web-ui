@@ -16,6 +16,8 @@ export default defineConfig({
   env: {
     BASEURL: 'http://localhost:4200/',
     ISOLATE: 'Y',
+    // Set LOG_NETWORK to 'true' to enable API request/response logging in reports
+    LOG_NETWORK: 'false',
     FQDN: '192.168.8.50',
     MPS_USERNAME: 'standalone',
     MPS_PASSWORD: 'G@ppm0ym',
@@ -35,6 +37,34 @@ export default defineConfig({
   e2e: {
     experimentalStudio: true,
     screenshotOnRunFailure: false,
-    specPattern: 'cypress/e2e/integration/**/*.ts'
+    specPattern: 'cypress/e2e/integration/**/*.ts',
+    setupNodeEvents(on) {
+      on('task', {
+        // Called from browser afterEach: flush collected logs for one test into
+        // the persistent temp JSON file. The custom reporter reads this file at
+        // run end to attach API logs to each test in the report.
+        networkLogFlush({ testTitle, logs }: { testTitle: string; logs: { method: string; url: string; statusCode: number; requestBody: unknown; responseBody: unknown; duration: number; timestamp: string }[] }) {
+          const fs = require('fs')
+          const path = require('path')
+          const tmpFile = path.join(process.cwd(), '.cypress-network-logs.json')
+          // Read any existing accumulated data from prior tests in this run
+          let accumulated: Record<string, unknown> = { _logNetworkEnabled: true }
+          try {
+            if (fs.existsSync(tmpFile)) {
+              accumulated = JSON.parse(fs.readFileSync(tmpFile, 'utf8'))
+            }
+          } catch (_) { /* ignore corrupt file */ }
+          // Merge: append entries for this test
+          if (logs.length > 0) {
+            if (!accumulated[testTitle]) accumulated[testTitle] = []
+            ;(accumulated[testTitle] as unknown[]).push(...logs)
+          }
+          // Always write the sentinel so reporter knows logging was active
+          accumulated._logNetworkEnabled = true
+          fs.writeFileSync(tmpFile, JSON.stringify(accumulated))
+          return null
+        }
+      })
+    }
   }
 })

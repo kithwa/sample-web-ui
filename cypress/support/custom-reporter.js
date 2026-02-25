@@ -11,6 +11,12 @@ class CustomTabularReporter extends mocha.reporters.Spec {
   constructor(runner, options) {
     super(runner, options)
 
+    // logNetwork: enable via reporterOptions.logNetwork OR env var CYPRESS_LOG_NETWORK=true
+    const logNetwork =
+      options.reporterOptions?.logNetwork === true ||
+      options.reporterOptions?.logNetwork === 'true' ||
+      process.env.CYPRESS_LOG_NETWORK === 'true'
+
     const reportData = {
       suites: [],
       totals: {
@@ -22,8 +28,16 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         skipped: 0
       },
       startTime: null,
-      endTime: null
+      endTime: null,
+      logNetwork
     }
+
+    // Accumulates network logs fetched from the Node task store at run end
+    // Shape: { [testFullTitle]: [ { method, url, statusCode, requestBody, responseBody, duration, timestamp } ] }
+    let networkLogs = {}
+
+    // Track the full title of the currently running test so we can key logs
+    let currentTestTitle = null
 
     let topLevelSuite = null
     let currentContext = null
@@ -31,6 +45,10 @@ class CustomTabularReporter extends mocha.reporters.Spec {
 
     runner.on('start', () => {
       reportData.startTime = new Date()
+    })
+
+    runner.on('test', (test) => {
+      currentTestTitle = test.fullTitle()
     })
 
     runner.on('suite', (suite) => {
@@ -88,7 +106,9 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       const testData = {
         name: test.title,
         status: 'PASS',
-        duration: test.duration
+        duration: test.duration,
+        fullTitle: test.fullTitle(),
+        networkLogs: [] // populated at end from networkLogs store
       }
       
       if (currentContext) {
@@ -118,7 +138,9 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         name: test.title,
         status: 'FAIL',
         duration: test.duration,
-        error: test.err.message
+        error: test.err ? test.err.message : 'Unknown error',
+        fullTitle: test.fullTitle(),
+        networkLogs: [] // populated at end from networkLogs store
       }
       
       if (currentContext) {
@@ -145,7 +167,9 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       const testData = {
         name: test.title,
         status: 'SKIP',
-        duration: 0
+        duration: 0,
+        fullTitle: test.fullTitle(),
+        networkLogs: []
       }
       
       if (currentContext) {
@@ -170,6 +194,39 @@ class CustomTabularReporter extends mocha.reporters.Spec {
 
     runner.on('end', () => {
       reportData.endTime = new Date()
+
+      // Pull network logs from the temp JSON file written by the networkLogFlush task.
+      // The _logNetworkEnabled sentinel tells us whether LOG_NETWORK=true was active,
+      // regardless of reporterOptions — so --env LOG_NETWORK=true is enough.
+      const tmpFile = path.join(process.cwd(), '.cypress-network-logs.json')
+      if (fs.existsSync(tmpFile)) {
+        try {
+          networkLogs = JSON.parse(fs.readFileSync(tmpFile, 'utf8'))
+          if (networkLogs._logNetworkEnabled) {
+            reportData.logNetwork = true
+          }
+          delete networkLogs._logNetworkEnabled
+          fs.unlinkSync(tmpFile) // clean up temp file
+        } catch (_) { /* silent – logs are best-effort */ }
+      }
+
+      // Walk all tests and attach their collected network logs
+      if (reportData.logNetwork) {
+        const attachLogs = (tests) => {
+          for (const t of (tests || [])) {
+            if (t.fullTitle && networkLogs[t.fullTitle]) {
+              t.networkLogs = networkLogs[t.fullTitle]
+            }
+          }
+        }
+        for (const suite of reportData.suites) {
+          attachLogs(suite.tests)
+          for (const ctx of (suite.contexts || [])) {
+            attachLogs(ctx.tests)
+          }
+        }
+      }
+
       this.generateReport(reportData, options)
     })
   }
@@ -209,6 +266,9 @@ class CustomTabularReporter extends mocha.reporters.Spec {
 
     console.log('\n' + '='.repeat(100))
     console.log('📊 TEST REPORT GENERATED:')
+    if (data.logNetwork) {
+      console.log('   🌐 Network API logging: ENABLED')
+    }
     console.log(`   - Report Folder: ${reportSubDir}`)
     console.log(`   - Text Report: ${path.join(reportSubDir, `${reportName}.txt`)}`)
     console.log(`   - CSV Report:  ${path.join(reportSubDir, `${reportName}.csv`)}`)
@@ -782,7 +842,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         <button class="btn btn-secondary" onclick="collapseAll()">▶ Collapse All</button>
       </div>
       <div class="suites">
-        ${data.suites.map((suite, index) => this.generateSuiteHTML(suite, index)).join('')}
+        ${data.suites.map((suite, index) => this.generateSuiteHTML(suite, index, false)).join('')}
       </div>
     </div>
     
@@ -805,6 +865,15 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     function collapseAll() {
       const suites = document.querySelectorAll('.suite');
       suites.forEach(suite => suite.classList.remove('expanded'));
+    }
+
+    function toggleNetwork(id) {
+      const panel = document.getElementById(id);
+      const btn = document.querySelector('[data-net="' + id + '"]');
+      if (panel) {
+        panel.classList.toggle('open');
+        if (btn) btn.textContent = panel.classList.contains('open') ? '🌐 Hide API Logs' : '🌐 API Logs';
+      }
     }
   </script>
 </body>
@@ -873,6 +942,23 @@ class CustomTabularReporter extends mocha.reporters.Spec {
             if (test.status === 'FAIL' && test.error) {
               lines.push(`        Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
             }
+
+            if (data.logNetwork && test.networkLogs && test.networkLogs.length > 0) {
+              lines.push(`        🌐 Network Calls (${test.networkLogs.length}):`)
+              test.networkLogs.forEach((log, i) => {
+                const sc = log.statusCode
+                const flag = sc >= 400 ? ' ⚠' : ''
+                lines.push(`          [${i + 1}] ${log.method} ${log.url} → ${sc}${flag} (${log.duration}ms) @ ${log.timestamp}`)
+                if (log.requestBody) {
+                  const rb = typeof log.requestBody === 'string' ? log.requestBody : JSON.stringify(log.requestBody)
+                  lines.push(`              REQ: ${rb.substring(0, 200)}${rb.length > 200 ? '...' : ''}`)
+                }
+                if (log.responseBody !== null && log.responseBody !== undefined) {
+                  const rs = typeof log.responseBody === 'string' ? log.responseBody : JSON.stringify(log.responseBody)
+                  lines.push(`              RES: ${rs.substring(0, 200)}${rs.length > 200 ? '...' : ''}`)
+                }
+              })
+            }
           })
           lines.push('')
         })
@@ -896,6 +982,23 @@ class CustomTabularReporter extends mocha.reporters.Spec {
             if (test.status === 'FAIL' && test.error) {
               lines.push(`      Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
             }
+
+            if (data.logNetwork && test.networkLogs && test.networkLogs.length > 0) {
+              lines.push(`      🌐 Network Calls (${test.networkLogs.length}):`)
+              test.networkLogs.forEach((log, i) => {
+                const sc = log.statusCode
+                const flag = sc >= 400 ? ' ⚠' : ''
+                lines.push(`        [${i + 1}] ${log.method} ${log.url} → ${sc}${flag} (${log.duration}ms) @ ${log.timestamp}`)
+                if (log.requestBody) {
+                  const rb = typeof log.requestBody === 'string' ? log.requestBody : JSON.stringify(log.requestBody)
+                  lines.push(`            REQ: ${rb.substring(0, 200)}${rb.length > 200 ? '...' : ''}`)
+                }
+                if (log.responseBody !== null && log.responseBody !== undefined) {
+                  const rs = typeof log.responseBody === 'string' ? log.responseBody : JSON.stringify(log.responseBody)
+                  lines.push(`            RES: ${rs.substring(0, 200)}${rs.length > 200 ? '...' : ''}`)
+                }
+              })
+            }
           })
         }
       } else {
@@ -918,6 +1021,23 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           if (test.status === 'FAIL' && test.error) {
             lines.push(`      Error: ${test.error.substring(0, 100)}${test.error.length > 100 ? '...' : ''}`)
           }
+
+          if (data.logNetwork && test.networkLogs && test.networkLogs.length > 0) {
+            lines.push(`      🌐 Network Calls (${test.networkLogs.length}):`)
+            test.networkLogs.forEach((log, i) => {
+              const sc = log.statusCode
+              const flag = sc >= 400 ? ' ⚠' : ''
+              lines.push(`        [${i + 1}] ${log.method} ${log.url} → ${sc}${flag} (${log.duration}ms) @ ${log.timestamp}`)
+              if (log.requestBody) {
+                const rb = typeof log.requestBody === 'string' ? log.requestBody : JSON.stringify(log.requestBody)
+                lines.push(`            REQ: ${rb.substring(0, 200)}${rb.length > 200 ? '...' : ''}`)
+              }
+              if (log.responseBody !== null && log.responseBody !== undefined) {
+                const rs = typeof log.responseBody === 'string' ? log.responseBody : JSON.stringify(log.responseBody)
+                lines.push(`            RES: ${rs.substring(0, 200)}${rs.length > 200 ? '...' : ''}`)
+              }
+            })
+          }
         })
       }
 
@@ -936,7 +1056,21 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     const lines = []
 
     // Header
-    lines.push('Suite Name,Test Case / Context,Sub-Test,Status,Duration (ms),Error Message')
+    if (data.logNetwork) {
+      lines.push('Suite Name,Test Case / Context,Sub-Test,Status,Duration (ms),Error Message,Network Call #,Timestamp,Method,URL,Status Code,Request Body,Response Body')
+    } else {
+      lines.push('Suite Name,Test Case / Context,Sub-Test,Status,Duration (ms),Error Message')
+    }
+
+    const csvNetworkRows = (suiteName, context, testName, test) => {
+      if (!data.logNetwork || !test.networkLogs || test.networkLogs.length === 0) return []
+      return test.networkLogs.map((log, i) => {
+        const reqBody = log.requestBody ? JSON.stringify(log.requestBody).replace(/"/g, '""') : ''
+        const resBody = log.responseBody !== null && log.responseBody !== undefined
+          ? JSON.stringify(log.responseBody).replace(/"/g, '""') : ''
+        return `"${suiteName}","${context}","${testName}",,,${i + 1},"${log.timestamp}",${log.method},"${log.url}",${log.statusCode},"${reqBody}","${resBody}"`
+      })
+    }
 
     // Data rows
     data.suites.forEach((suite) => {
@@ -946,6 +1080,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           context.tests.forEach((test) => {
             const error = test.error ? `"${test.error.replace(/"/g, '""')}"` : ''
             lines.push(`"${suite.name}","${context.name}","${test.name}",${test.status},${test.duration || 0},${error}`)
+            lines.push(...csvNetworkRows(suite.name, context.name, test.name, test))
           })
         })
         // Direct tests under suite (if any)
@@ -953,6 +1088,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           suite.tests.forEach((test) => {
             const error = test.error ? `"${test.error.replace(/"/g, '""')}"` : ''
             lines.push(`"${suite.name}","","${test.name}",${test.status},${test.duration || 0},${error}`)
+            lines.push(...csvNetworkRows(suite.name, '', test.name, test))
           })
         }
       } else {
@@ -961,6 +1097,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         tests.forEach((test) => {
           const error = test.error ? `"${test.error.replace(/"/g, '""')}"` : ''
           lines.push(`"${suite.name}","${test.name}","",${test.status},${test.duration || 0},${error}`)
+          lines.push(...csvNetworkRows(suite.name, test.name, '', test))
         })
       }
     })
@@ -1377,12 +1514,81 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       transform: translateY(-1px);
       box-shadow: 0 4px 8px rgba(74, 85, 104, 0.3);
     }
+
+    /* ── Network log styles ──────────────────────────── */
+    .network-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #ebf8ff;
+      color: #2b6cb0;
+      border: 1px solid #bee3f8;
+      margin-left: 10px;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .network-toggle:hover { background: #bee3f8; }
+    .network-log-panel {
+      display: none;
+      margin: 0 20px 14px 20px;
+      border: 1px solid #bee3f8;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #f0f9ff;
+    }
+    .network-log-panel.open { display: block; }
+    .network-log-header {
+      padding: 8px 14px;
+      background: #ebf8ff;
+      font-size: 12px;
+      font-weight: 700;
+      color: #2b6cb0;
+      border-bottom: 1px solid #bee3f8;
+    }
+    .network-log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .network-log-table th {
+      padding: 7px 12px;
+      background: #dbeafe;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #1e40af;
+      border-bottom: 1px solid #bfdbfe;
+    }
+    .network-log-table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid #e0f2fe;
+      vertical-align: top;
+      word-break: break-all;
+      max-width: 300px;
+      font-family: 'Courier New', monospace;
+      color: #1e3a5f;
+    }
+    .network-log-table tr:last-child td { border-bottom: none; }
+    .network-log-table tr:hover td { background: #e0f2fe; }
+    .net-status-ok { color: #276749; font-weight: 700; }
+    .net-status-err { color: #c53030; font-weight: 700; }
+    .net-method { font-weight: 700; color: #553c9a; }
+    .net-body {
+      max-height: 80px;
+      overflow-y: auto;
+      display: block;
+      white-space: pre-wrap;
+      font-size: 11px;
+      color: #4a5568;
+    }
   </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Cypress Test Execution Report</h1>
       <div class="header-meta">
         <div class="header-meta-item">
           <span class="header-meta-label">Started</span>
@@ -1436,7 +1642,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         <button class="btn btn-secondary" onclick="collapseAll()">▶ Collapse All</button>
       </div>
       <div class="suites">
-        ${data.suites.map((suite, index) => this.generateSuiteHTML(suite, index)).join('')}
+        ${data.suites.map((suite, index) => this.generateSuiteHTML(suite, index, data.logNetwork)).join('')}
       </div>
     </div>
     
@@ -1460,6 +1666,15 @@ class CustomTabularReporter extends mocha.reporters.Spec {
       const suites = document.querySelectorAll('.suite');
       suites.forEach(suite => suite.classList.remove('expanded'));
     }
+
+    function toggleNetwork(id) {
+      const panel = document.getElementById(id);
+      const btn = document.querySelector('[data-net="' + id + '"]');
+      if (panel) {
+        panel.classList.toggle('open');
+        if (btn) btn.textContent = panel.classList.contains('open') ? '🌐 Hide API Logs' : '🌐 API Logs';
+      }
+    }
   </script>
 </body>
 </html>`
@@ -1467,7 +1682,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     return html
   }
 
-  generateSuiteHTML(suite, index) {
+  generateSuiteHTML(suite, index, logNetwork) {
     const statusIcon = (status) => {
       switch(status) {
         case 'PASS': return '✓'
@@ -1476,12 +1691,56 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         default: return '?'
       }
     }
-    
+
+    // Renders an expandable network log panel for a test
+    const networkLogHTML = (test, panelId) => {
+      if (!logNetwork || !test.networkLogs || test.networkLogs.length === 0) return ''
+      const rows = test.networkLogs.map((log, i) => {
+        const scClass = log.statusCode >= 400 ? 'net-status-err' : 'net-status-ok'
+        const reqBody = log.requestBody
+          ? this.escapeHtml((typeof log.requestBody === 'string' ? log.requestBody : JSON.stringify(log.requestBody, null, 2)).substring(0, 500))
+          : '<em style="color:#a0aec0">—</em>'
+        const resBody = (log.responseBody !== null && log.responseBody !== undefined)
+          ? this.escapeHtml((typeof log.responseBody === 'string' ? log.responseBody : JSON.stringify(log.responseBody, null, 2)).substring(0, 500))
+          : '<em style="color:#a0aec0">—</em>'
+        return `
+          <tr>
+            <td style="color:#718096;text-align:center">${i + 1}</td>
+            <td style="color:#718096;white-space:nowrap">${log.timestamp}</td>
+            <td class="net-method">${log.method}</td>
+            <td style="word-break:break-all;max-width:260px">${this.escapeHtml(log.url)}</td>
+            <td class="${scClass}">${log.statusCode}</td>
+            <td style="color:#718096;white-space:nowrap">${log.duration}ms</td>
+            <td><span class="net-body">${reqBody}</span></td>
+            <td><span class="net-body">${resBody}</span></td>
+          </tr>`
+      }).join('')
+      return `
+        <tr style="background:#f0f9ff">
+          <td colspan="3" style="padding:4px 20px 10px 40px">
+            <span class="network-toggle" data-net="${panelId}" onclick="toggleNetwork('${panelId}')">🌐 API Logs (${test.networkLogs.length})</span>
+            <div class="network-log-panel" id="${panelId}">
+              <div class="network-log-header">🌐 API / Network Calls — ${this.escapeHtml(test.name)}</div>
+              <table class="network-log-table">
+                <thead>
+                  <tr>
+                    <th>#</th><th>Timestamp</th><th>Method</th><th>URL</th>
+                    <th>Status</th><th>Duration</th><th>Request Body</th><th>Response Body</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </td>
+        </tr>`
+    }
+
     // Check if suite has contexts (hierarchical structure)
     const hasContexts = suite.contexts && suite.contexts.length > 0
-    
+
     let bodyHTML = ''
-    
+    let panelCounter = 0
+
     if (hasContexts) {
       // Hierarchical structure: suite > contexts > tests
       bodyHTML = `
@@ -1495,7 +1754,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
           </thead>
           <tbody>
       `
-      
+
       suite.contexts.forEach(context => {
         // Context row (Test Case)
         bodyHTML += `
@@ -1503,13 +1762,13 @@ class CustomTabularReporter extends mocha.reporters.Spec {
               <td colspan="3" class="context-name">${this.escapeHtml(context.name)}</td>
             </tr>
         `
-        
+
         // Tests under context (Sub-Test Cases)
         context.tests.forEach(test => {
-          const errorHTML = test.status === 'FAIL' && test.error 
+          const panelId = `net-${index}-${panelCounter++}`
+          const errorHTML = test.status === 'FAIL' && test.error
             ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
             : ''
-          
           bodyHTML += `
             <tr class="subtest-row">
               <td class="test-name subtest-name">↳ ${this.escapeHtml(test.name)}</td>
@@ -1521,17 +1780,18 @@ class CustomTabularReporter extends mocha.reporters.Spec {
               <td class="duration">${test.duration ? test.duration + 'ms' : 'N/A'}</td>
             </tr>
             ${errorHTML}
+            ${networkLogHTML(test, panelId)}
           `
         })
       })
-      
+
       // Direct tests under suite (if any)
       if (suite.tests && suite.tests.length > 0) {
         suite.tests.forEach(test => {
-          const errorHTML = test.status === 'FAIL' && test.error 
+          const panelId = `net-${index}-${panelCounter++}`
+          const errorHTML = test.status === 'FAIL' && test.error
             ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
             : ''
-          
           bodyHTML += `
             <tr>
               <td class="test-name">${this.escapeHtml(test.name)}</td>
@@ -1543,10 +1803,11 @@ class CustomTabularReporter extends mocha.reporters.Spec {
               <td class="duration">${test.duration ? test.duration + 'ms' : 'N/A'}</td>
             </tr>
             ${errorHTML}
+            ${networkLogHTML(test, panelId)}
           `
         })
       }
-      
+
       bodyHTML += `
           </tbody>
         </table>
@@ -1554,10 +1815,10 @@ class CustomTabularReporter extends mocha.reporters.Spec {
     } else {
       // Flat structure: suite > tests (no contexts)
       const testsHTML = (suite.tests || []).map(test => {
-        const errorHTML = test.status === 'FAIL' && test.error 
+        const panelId = `net-${index}-${panelCounter++}`
+        const errorHTML = test.status === 'FAIL' && test.error
           ? `<tr class="error-row"><td colspan="3"><div class="error-message">Error: ${this.escapeHtml(test.error)}</div></td></tr>`
           : ''
-        
         return `
           <tr>
             <td class="test-name">${this.escapeHtml(test.name)}</td>
@@ -1569,9 +1830,10 @@ class CustomTabularReporter extends mocha.reporters.Spec {
             <td class="duration">${test.duration ? test.duration + 'ms' : 'N/A'}</td>
           </tr>
           ${errorHTML}
+          ${networkLogHTML(test, panelId)}
         `
       }).join('')
-      
+
       bodyHTML = `
         <table class="tests-table">
           <thead>
@@ -1587,7 +1849,7 @@ class CustomTabularReporter extends mocha.reporters.Spec {
         </table>
       `
     }
-    
+
     return `
       <div class="suite" id="suite-${index}">
         <div class="suite-header" onclick="toggleSuite(${index})">
