@@ -130,6 +130,27 @@ describe('Redfish SessionService Resource', () => {
 // GET/POST /redfish/v1/SessionService/Sessions
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Sessions Collection', () => {
+  before(() => {
+    // Delete any sessions left over from previous test runs so POST tests start clean
+    cy.request({
+      method: 'GET',
+      url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
+      headers: basicAuthHeaders(),
+      failOnStatusCode: false
+    }).then((response) => {
+      if (response.status === httpCodes.SUCCESS) {
+        ;(response.body.Members as Array<{ '@odata.id': string }>).forEach((m) => {
+          cy.request({
+            method: 'DELETE',
+            url: `${redfishUrl()}${m['@odata.id']}`,
+            headers: basicAuthHeaders(),
+            failOnStatusCode: false
+          })
+        })
+      }
+    })
+  })
+
   context('POST /redfish/v1/SessionService/Sessions (Login)', () => {
     it('creates a session with valid credentials — no prior auth required', () => {
       cy.request({
@@ -143,6 +164,15 @@ describe('Redfish Sessions Collection', () => {
         expect(response.headers['x-auth-token']).to.be.a('string').and.not.be.empty
         expect(response.headers).to.have.property('location')
         expect(response.headers.location).to.include('/redfish/v1/SessionService/Sessions/')
+        // Cleanup: delete the session so subsequent tests start with no active session
+        const token = response.headers['x-auth-token'] as string
+        const sid = (response.body as { Id: string }).Id
+        cy.request({
+          method: 'DELETE',
+          url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/${sid}`,
+          headers: { 'X-Auth-Token': token },
+          failOnStatusCode: false
+        })
       })
     })
 
@@ -160,6 +190,15 @@ describe('Redfish Sessions Collection', () => {
           'UserName',
           sessionFixtures.validCredentials.request.UserName
         )
+        // Cleanup: delete the session so subsequent tests start with no active session
+        const token = response.headers['x-auth-token'] as string
+        const sid = (response.body as { Id: string }).Id
+        cy.request({
+          method: 'DELETE',
+          url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/${sid}`,
+          headers: { 'X-Auth-Token': token },
+          failOnStatusCode: false
+        })
       })
     })
 
