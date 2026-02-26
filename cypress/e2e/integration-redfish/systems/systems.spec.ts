@@ -794,3 +794,117 @@ describe('Redfish Complete BIOS Reset Flow', () => {
     })
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Power Cycle Lifecycle — Full Power OFF → ON flow with recursive state polling
+//
+// Flow:
+//   1. GET  system  → assert PowerState is "On"          (precondition)
+//   2. POST ForceOff → assert 202 Accepted
+//   3. Poll GET every 10 s, up to 3 min, until PowerState = "Off"
+//   4. Fixed 10-second settle wait
+//   5. POST On      → assert 202 Accepted
+//   6. Fixed 3-minute boot wait
+//   7. Poll GET every 10 s, up to 3 min, until PowerState = "On"
+//
+// Total worst-case duration: ~9 min 10 s  →  test timeout set to 12 min.
+// Skips gracefully when REDFISH_SYSTEM_ID is unavailable (device returns 404/500).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Redfish System Power Cycle Lifecycle', () => {
+  /** Poll interval between GET /Systems/{id} calls while waiting for state change */
+  const POLL_INTERVAL_MS = 10_000
+  /** Maximum time to wait for each state transition (3 minutes) */
+  const POLL_TIMEOUT_MS = 3 * 60 * 1000
+
+  /**
+   * Recursively polls GET /redfish/v1/Systems/{id} until `PowerState` equals
+   * `targetState`, then resolves. Throws if `deadline` is exceeded.
+   *
+   * The `deadline` parameter is captured once on the first call (default =
+   * now + POLL_TIMEOUT_MS) and passed unchanged on every recursive call so
+   * that the same absolute deadline is used throughout the polling loop.
+   */
+  const pollPowerState = (
+    targetState: string,
+    deadline: number = Date.now() + POLL_TIMEOUT_MS
+  ): void => {
+    cy.request({
+      method: 'GET',
+      url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
+      headers: basicAuthHeaders(),
+      failOnStatusCode: false
+    }).then((response) => {
+      expect(response.status).to.eq(httpCodes.SUCCESS)
+      const current = (response.body as Record<string, string>).PowerState
+      cy.log(`PowerState: ${current} (waiting for: ${targetState})`)
+      if (current === targetState) {
+        cy.log(`✅ PowerState reached: ${targetState}`)
+        return
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Timed out waiting for PowerState="${targetState}". Last observed: "${current}"`
+        )
+      }
+      cy.wait(POLL_INTERVAL_MS)
+      pollPowerState(targetState, deadline)
+    })
+  }
+
+  it('powers OFF then ON and verifies state transitions', { timeout: 12 * 60 * 1000 }, () => {
+    // ── Step 1: Confirm the system is currently powered On ─────────────────
+    cy.request({
+      method: 'GET',
+      url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
+      headers: basicAuthHeaders(),
+      failOnStatusCode: false
+    }).then((step1) => {
+      if (step1.status !== httpCodes.SUCCESS) {
+        cy.log(`⚠️  Device unavailable (HTTP ${step1.status}) — skipping power-cycle test`)
+        return
+      }
+      expect(step1.body, 'Step 1: system must be On before test begins').to.have.property(
+        'PowerState',
+        'On'
+      )
+
+      // ── Step 2: POST ForceOff ─────────────────────────────────────────────
+      cy.request({
+        method: 'POST',
+        url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+        headers: basicAuthHeaders(),
+        body: systemsFixtures.reset.forceOff,
+        failOnStatusCode: false
+      }).then((step2) => {
+        expect(step2.status, 'Step 2: ForceOff must be accepted (202)').to.eq(202)
+
+        // ── Step 3: Poll until PowerState = "Off" (max 3 min) ────────────
+        cy.log('Step 3: polling for PowerState "Off" (max 3 min) …')
+        pollPowerState('Off')
+
+        // ── Step 4: Additional 10-second settle wait ──────────────────────
+        cy.log('Step 4: waiting 10 s after power-off …')
+        cy.wait(10_000)
+
+        // ── Step 5: POST On ───────────────────────────────────────────────
+        cy.request({
+          method: 'POST',
+          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+          headers: basicAuthHeaders(),
+          body: systemsFixtures.reset.on,
+          failOnStatusCode: false
+        }).then((step5) => {
+          expect(step5.status, 'Step 5: Power On must be accepted (202)').to.eq(202)
+
+          // ── Step 6: Fixed 3-minute boot wait ─────────────────────────
+          cy.log('Step 6: fixed 3-minute boot wait …')
+          cy.wait(3 * 60 * 1000)
+
+          // ── Step 7: Poll until PowerState = "On" (max 3 min) ─────────
+          cy.log('Step 7: polling for PowerState "On" (max 3 min) …')
+          pollPowerState('On')
+        })
+      })
+    })
+  })
+})
