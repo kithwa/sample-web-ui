@@ -22,11 +22,29 @@
  */
 
 import { defineConfig } from 'cypress'
+import * as fs from 'fs'
+import * as path from 'path'
+
+/**
+ * All timestamps in this config are UTC (ISO 8601 with trailing "Z").
+ * This matches the UTC timestamps written by mocha-junit-reporter inside
+ * the XML <testsuite timestamp="..."> attribute, keeping everything consistent.
+ */
+
+/** UTC timestamp for log lines: "2026-02-27T07:11:51.381Z" */
+const utcTimestamp = (): string => new Date().toISOString()
+
+/** UTC timestamp safe for filenames: "2026-02-27T07-11-51Z" */
+const utcFileTimestamp = (): string =>
+  new Date().toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/:/g, '-')
 
 export default defineConfig({
   reporter: 'junit',
   reporterOptions: {
-    mochaFile: 'cypress-redfish-api-test-output-[hash].xml'
+    // [hash] is replaced per-spec by mocha-junit-reporter to avoid collisions
+    // when multiple specs run in the same session. The UTC timestamp prefix
+    // makes it easy to correlate the filename with the XML internal timestamp.
+    mochaFile: `cypress-redfish-api-test-output-${utcFileTimestamp()}-[hash].xml`
   },
   viewportWidth: 1280,
   viewportHeight: 720,
@@ -50,6 +68,23 @@ export default defineConfig({
   rejectUnauthorized: false,
 
   e2e: {
+    setupNodeEvents(on) {
+      // Create a timestamped log file under cypress/logs/ for functional test runs.
+      // The file is written in real-time so you can `tail -f` it during a run.
+      // cypress/logs/*.log is covered by the *.log entry in .gitignore.
+      const logsDir = path.join(__dirname, 'cypress', 'logs')
+      if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true })
+      const logFile = path.join(logsDir, `redfish-functional-${utcFileTimestamp()}.log`)
+
+      on('task', {
+        log(message: string): null {
+          const line = `${utcTimestamp()}  ${message}`
+          process.stdout.write(line + '\n')
+          fs.appendFileSync(logFile, line + '\n', 'utf8')
+          return null
+        }
+      })
+    },
     // Run specs under integration-redfish/ (alongside the original integration/ folder)
     specPattern: 'cypress/e2e/integration-redfish/**/*.spec.ts',
     supportFile: 'cypress/support/e2e.ts',
