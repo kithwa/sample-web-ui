@@ -37,6 +37,42 @@ export default defineConfig({
   e2e: {
     experimentalStudio: true,
     screenshotOnRunFailure: false,
-    specPattern: 'cypress/e2e/integration/**/*.ts'
+    specPattern: 'cypress/e2e/integration/**/*.ts',
+    setupNodeEvents(on, config) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require('fs')
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const versionFetcher = require('./cypress/support/version-fetcher')
+
+      on('before:run', async () => {
+        // Only fetch & report component versions when REPORT_COMPONENT_VERSIONS=true.
+        // Defaults to false so normal CI runs are unaffected.
+        const enabled = String(config.env?.REPORT_COMPONENT_VERSIONS).toLowerCase() === 'true'
+        if (!enabled) return
+
+        // Fetch DMT component versions from live APIs and package files.
+        // Results written to cypress/reports/.test-environment.json and
+        // consumed by the custom HTML reporter for the report header.
+        try {
+          const versionInfo = await versionFetcher.fetchVersionInfo(config)
+          const reportsDir = 'cypress/reports'
+          if (!fs.existsSync(reportsDir)) {
+            fs.mkdirSync(reportsDir, { recursive: true })
+          }
+          fs.writeFileSync(
+            `${reportsDir}/.test-environment.json`,
+            JSON.stringify(versionInfo, null, 2)
+          )
+          console.log('\n🔍 DMT Test Environment:')
+          console.log(`   Deployment : ${versionInfo.deploymentType}`)
+          versionInfo.components.forEach((c: { name: string; version: string }) => {
+            console.log(`   ${c.name.padEnd(30)} ${c.version}`)
+          })
+          console.log()
+        } catch (err) {
+          console.warn('\n⚠️  Could not fetch component version info:', err)
+        }
+      })
+    }
   }
 })
