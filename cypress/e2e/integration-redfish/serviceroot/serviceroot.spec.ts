@@ -21,8 +21,8 @@ const redfishUrl = (): string => Cypress.env('REDFISH_BASEURL') ?? 'http://local
 // GET /redfish/v1/
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Service Root - GET /redfish/v1/', () => {
-  context('public endpoint serves ServiceRoot document without authentication', () => {
-    it('is accessible without authentication', () => {
+  context('TC_SERVICEROOT_GET_WITHOUT_AUTH - public endpoint serves ServiceRoot document without authentication', () => {
+    it('returns HTTP 200 with no authentication credentials', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/`,
@@ -32,7 +32,7 @@ describe('Redfish Service Root - GET /redfish/v1/', () => {
       })
     })
 
-    it('responds with application/json and OData-Version: 4.0', () => {
+    it('returns content-type application/json and OData-Version 4.0 response header', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/`,
@@ -44,7 +44,7 @@ describe('Redfish Service Root - GET /redfish/v1/', () => {
       })
     })
 
-    it('returns required @odata properties', () => {
+    it('returns @odata.context, @odata.id, and @odata.type pointing to ServiceRoot', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/`,
@@ -62,7 +62,7 @@ describe('Redfish Service Root - GET /redfish/v1/', () => {
       })
     })
 
-    it('returns required Redfish ServiceRoot fields', () => {
+    it('returns Id, Name, RedfishVersion (semver), and UUID in the ServiceRoot body', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/`,
@@ -80,7 +80,7 @@ describe('Redfish Service Root - GET /redfish/v1/', () => {
       })
     })
 
-    it('contains Systems link pointing to /redfish/v1/Systems', () => {
+    it('contains Systems navigation link with @odata.id set to /redfish/v1/Systems', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/`,
@@ -92,7 +92,7 @@ describe('Redfish Service Root - GET /redfish/v1/', () => {
       })
     })
 
-    it('contains SessionService link pointing to /redfish/v1/SessionService', () => {
+    it('contains SessionService navigation link with @odata.id set to /redfish/v1/SessionService', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/`,
@@ -110,8 +110,8 @@ describe('Redfish Service Root - GET /redfish/v1/', () => {
 // GET /redfish/v1/$metadata
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish OData Metadata - GET /redfish/v1/$metadata', () => {
-  context('public endpoint serves OData CSDL metadata as application/xml', () => {
-    it('is accessible without authentication', () => {
+  context('TC_METADATA_GET_WITHOUT_AUTH - public endpoint serves OData CSDL metadata as application/xml', () => {
+    it('returns HTTP 200 with no authentication credentials', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/$metadata`,
@@ -122,7 +122,7 @@ describe('Redfish OData Metadata - GET /redfish/v1/$metadata', () => {
       })
     })
 
-    it('responds with application/xml and OData-Version: 4.0', () => {
+    it('returns content-type application/xml and OData-Version 4.0 response header', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/$metadata`,
@@ -141,8 +141,8 @@ describe('Redfish OData Metadata - GET /redfish/v1/$metadata', () => {
 // GET /redfish/v1/odata
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish OData Service Document - GET /redfish/v1/odata', () => {
-  context('public endpoint serves OData service document with entry list', () => {
-    it('is accessible without authentication', () => {
+  context('TC_ODATA_GET_SERVICE_ENTRIES - public endpoint serves OData service document with entry list', () => {
+    it('returns HTTP 200 with no authentication credentials', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/odata`,
@@ -152,7 +152,7 @@ describe('Redfish OData Service Document - GET /redfish/v1/odata', () => {
       })
     })
 
-    it('responds with application/json', () => {
+    it('returns content-type application/json response header', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/odata`,
@@ -163,7 +163,7 @@ describe('Redfish OData Service Document - GET /redfish/v1/odata', () => {
       })
     })
 
-    it('contains @odata.context and a value array of service entries', () => {
+    it('returns @odata.context and a non-empty value array of service entries', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/odata`,
@@ -176,7 +176,7 @@ describe('Redfish OData Service Document - GET /redfish/v1/odata', () => {
       })
     })
 
-    it('each service entry has name, kind and url properties with valid enum kind', () => {
+    it('each service entry has name, kind (Singleton or EntitySet), and url properties', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/odata`,
@@ -196,7 +196,7 @@ describe('Redfish OData Service Document - GET /redfish/v1/odata', () => {
       })
     })
 
-    it('service entries are sorted alphabetically by name', () => {
+    it('service entries in value array are sorted alphabetically by name', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/odata`,
@@ -209,7 +209,7 @@ describe('Redfish OData Service Document - GET /redfish/v1/odata', () => {
       })
     })
 
-    it('lists Systems as a Singleton service at /redfish/v1/Systems', () => {
+    it('includes Systems entry with kind Singleton and url /redfish/v1/Systems', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/odata`,
@@ -230,8 +230,8 @@ describe('Redfish OData Service Document - GET /redfish/v1/odata', () => {
 // GET /redfish/v1  (no trailing slash)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Service Root - No Trailing Slash', () => {
-  context('GET /redfish/v1 without trailing slash returns 200 or redirect to /', () => {
-    it('GET /redfish/v1 returns 200 or redirect', () => {
+  context('TC_SERVICEROOT_GET_NO_TRAILING_SLASH - GET /redfish/v1 without trailing slash returns 200 or redirect to /', () => {
+    it('returns HTTP 200 or a 3xx redirect with Location pointing to /redfish/v1/', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1`,
@@ -254,8 +254,8 @@ describe('Redfish Service Root - No Trailing Slash', () => {
 // GET /redfish/v1/$metadata — XML content assertions
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish OData Metadata - XML Content', () => {
-  context('EDMX document structure contains required namespace and schema references', () => {
-    it('response body is not empty', () => {
+  context('TC_METADATA_XML_CONTENT_VALIDATION - EDMX document structure contains required namespace and schema references', () => {
+    it('returns a non-empty string response body', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/$metadata`,
@@ -267,7 +267,7 @@ describe('Redfish OData Metadata - XML Content', () => {
       })
     })
 
-    it('contains required XML declaration and EDMX root element', () => {
+    it('contains XML declaration and edmx:Edmx root element with OASIS edmx namespace', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/$metadata`,
@@ -282,7 +282,7 @@ describe('Redfish OData Metadata - XML Content', () => {
       })
     })
 
-    it('contains required DMTF Redfish namespace references', () => {
+    it('contains ServiceRoot, ComputerSystem, and Resource namespace references', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/$metadata`,
@@ -297,7 +297,7 @@ describe('Redfish OData Metadata - XML Content', () => {
       })
     })
 
-    it('contains EDMX structural elements', () => {
+    it('contains edmx:Reference and edmx:DataServices structural elements', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/$metadata`,
@@ -311,7 +311,7 @@ describe('Redfish OData Metadata - XML Content', () => {
       })
     })
 
-    it('returns identical response on second request (consistency)', () => {
+    it('returns identical body on repeated requests confirming idempotent response', () => {
       let firstBody: string
       cy.request({
         method: 'GET',
@@ -338,7 +338,7 @@ describe('Redfish OData Metadata - XML Content', () => {
 // Method Not Allowed — /redfish/v1/  and  /redfish/v1/odata
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Service Root - Method Not Allowed', () => {
-  context('POST PUT PATCH DELETE on /redfish/v1/ return 405 Method Not Allowed', () => {
+  context('TC_SERVICEROOT_METHOD_NOT_ALLOWED - POST PUT PATCH DELETE on /redfish/v1/ return 405 Method Not Allowed', () => {
     const methodsNotAllowed = ['POST', 'PUT', 'DELETE', 'PATCH'] as const
 
     methodsNotAllowed.forEach((method) => {
@@ -359,7 +359,7 @@ describe('Redfish Service Root - Method Not Allowed', () => {
 })
 
 describe('Redfish OData Service Document - Method Not Allowed', () => {
-  context('POST PUT PATCH DELETE on /redfish/v1/odata return 405 Method Not Allowed', () => {
+  context('TC_ODATA_METHOD_NOT_ALLOWED - POST PUT PATCH DELETE on /redfish/v1/odata return 405 Method Not Allowed', () => {
     const methodsNotAllowed = ['POST', 'PUT', 'DELETE', 'PATCH'] as const
 
     methodsNotAllowed.forEach((method) => {
