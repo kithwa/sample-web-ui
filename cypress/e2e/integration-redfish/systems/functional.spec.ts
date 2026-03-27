@@ -83,8 +83,8 @@ const loggedRequest = (
 // Worst-case: 2 min pre-flight + ~7 min 10 s → test timeout set to 12 min.
 // Skips gracefully when device is unreachable (404/500).
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish System Power Action Functional Test', () => {
-  context('ForceOff then On transitions device through Off state and back to On', () => {
+describe('Functional Test - Redfish System Power Cycle - POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset', () => {
+  context('TC_SYSTEM_POWER_CYCLE_FORCE_OFF_TO_ON - ForceOff then On transitions device through Off state and back to On', () => {
     /** Interval between each poll GET */
     const POLL_INTERVAL_MS = 10_000
     /**
@@ -129,7 +129,7 @@ describe('Redfish System Power Action Functional Test', () => {
       })
     }
 
-    it('powers OFF then ON and verifies state transitions', function () {
+    it('performs ForceOff then On cycle and verifies PowerState transitions through Off to On', function () {
       this.timeout(12 * 60 * 1000)
       cy.task('log', '\n════════════════════════════════════════════════════════')
       cy.task('log', ' TEST: Redfish System Power Action Functional Test')
