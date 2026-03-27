@@ -39,12 +39,17 @@ const utcFileTimestamp = (): string =>
   new Date().toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/:/g, '-')
 
 export default defineConfig({
-  reporter: 'junit',
+  reporter: 'mocha-multi-reporters',
   reporterOptions: {
-    // [hash] is replaced per-spec by mocha-junit-reporter to avoid collisions
-    // when multiple specs run in the same session. The UTC timestamp prefix
-    // makes it easy to correlate the filename with the XML internal timestamp.
-    mochaFile: `cypress-redfish-api-test-output-${utcFileTimestamp()}-[hash].xml`
+    reporterEnabled: 'cypress/support/custom-reporter.js, mocha-junit-reporter',
+    cypressSupportCustomReporterJsReporterOptions: {
+      reportDir: 'cypress/reports',
+      reportName: 'cypress-redfish-test-report'
+    },
+    mochaJunitReporterReporterOptions: {
+      mochaFile: `cypress-redfish-api-test-output-${utcFileTimestamp()}-[hash].xml`,
+      toConsole: false
+    }
   },
   viewportWidth: 1280,
   viewportHeight: 720,

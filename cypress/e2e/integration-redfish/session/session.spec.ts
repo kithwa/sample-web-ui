@@ -34,9 +34,9 @@ const basicAuthHeaders = (): Record<string, string> => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/PATCH/PUT /redfish/v1/SessionService
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish SessionService Resource', () => {
-  context('GET /redfish/v1/SessionService', () => {
-    it('returns SessionService resource with Basic Auth', () => {
+describe('Redfish SessionService - GET/PATCH/PUT /redfish/v1/SessionService', () => {
+  context('TC_SESSIONSERVICE_GET_RESOURCE - GET returns SessionService document with @odata.type and Sessions link', () => {
+    it('returns SessionService resource with @odata.type and Sessions link using Basic Auth', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService`,
@@ -62,7 +62,7 @@ describe('Redfish SessionService Resource', () => {
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService`,
@@ -73,8 +73,8 @@ describe('Redfish SessionService Resource', () => {
     })
   })
 
-  context('PATCH /redfish/v1/SessionService', () => {
-    it('returns current SessionService state with Basic Auth', () => {
+  context('TC_SESSIONSERVICE_PATCH_RESOURCE - PATCH updates and returns current SessionService state', () => {
+    it('returns updated SessionService resource body using Basic Auth', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/SessionService`,
@@ -87,7 +87,7 @@ describe('Redfish SessionService Resource', () => {
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/SessionService`,
@@ -99,8 +99,8 @@ describe('Redfish SessionService Resource', () => {
     })
   })
 
-  context('PUT /redfish/v1/SessionService', () => {
-    it('returns current SessionService state with Basic Auth', () => {
+  context('TC_SESSIONSERVICE_PUT_RESOURCE - PUT returns current SessionService state', () => {
+    it('returns current SessionService resource body with an empty request body using Basic Auth', () => {
       cy.request({
         method: 'PUT',
         url: `${redfishUrl()}/redfish/v1/SessionService`,
@@ -113,7 +113,7 @@ describe('Redfish SessionService Resource', () => {
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'PUT',
         url: `${redfishUrl()}/redfish/v1/SessionService`,
@@ -129,7 +129,7 @@ describe('Redfish SessionService Resource', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET/POST /redfish/v1/SessionService/Sessions
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish Sessions Collection', () => {
+describe('Redfish Sessions Collection - GET/POST /redfish/v1/SessionService/Sessions', () => {
   before(() => {
     // Delete any sessions left over from previous test runs so POST tests start clean
     cy.request({
@@ -151,8 +151,8 @@ describe('Redfish Sessions Collection', () => {
     })
   })
 
-  context('POST /redfish/v1/SessionService/Sessions (Login)', () => {
-    it('creates a session with valid credentials — no prior auth required', () => {
+  context('TC_SESSIONS_POST_LOGIN - POST creates a session without prior authentication required', () => {
+    it('returns HTTP 201 with X-Auth-Token and Location header when using valid credentials', () => {
       cy.request({
         method: 'POST',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
@@ -176,7 +176,7 @@ describe('Redfish Sessions Collection', () => {
       })
     })
 
-    it('returns a valid Session resource body on successful login', () => {
+    it('returns Session resource with @odata.type, Id, and UserName on successful login', () => {
       cy.request({
         method: 'POST',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
@@ -202,7 +202,7 @@ describe('Redfish Sessions Collection', () => {
       })
     })
 
-    it('returns 401 for invalid credentials', () => {
+    it('returns HTTP 401 Unauthorized for incorrect username and password', () => {
       cy.request({
         method: 'POST',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
@@ -213,7 +213,7 @@ describe('Redfish Sessions Collection', () => {
       })
     })
 
-    it('returns 400 when UserName and Password fields are missing', () => {
+    it('returns HTTP 400 or 401 when UserName and Password fields are missing from request body', () => {
       cy.request({
         method: 'POST',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
@@ -225,8 +225,8 @@ describe('Redfish Sessions Collection', () => {
     })
   })
 
-  context('GET /redfish/v1/SessionService/Sessions', () => {
-    it('returns SessionCollection with Basic Auth', () => {
+  context('TC_SESSIONS_GET_COLLECTION - GET returns SessionCollection with members array and count', () => {
+    it('returns SessionCollection resource with @odata.type, Members array, and count using Basic Auth', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
@@ -245,7 +245,7 @@ describe('Redfish Sessions Collection', () => {
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
@@ -261,7 +261,7 @@ describe('Redfish Sessions Collection', () => {
 // GET/DELETE /redfish/v1/SessionService/Sessions/{SessionId}
 // Uses session created via POST; token stored in before() hook.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish Individual Session', () => {
+describe('Redfish Individual Session - GET/DELETE /redfish/v1/SessionService/Sessions/{SessionId}', () => {
   let authToken: string
   let sessionId: string
 
@@ -279,8 +279,8 @@ describe('Redfish Individual Session', () => {
     })
   })
 
-  context('GET /redfish/v1/SessionService/Sessions/{SessionId}', () => {
-    it('returns session details using X-Auth-Token', () => {
+  context('TC_SESSION_GET_BY_ID - GET returns individual Session resource using X-Auth-Token or Basic Auth', () => {
+    it('returns Session resource with Id and UserName using X-Auth-Token header', () => {
       if (!authToken || !sessionId) { cy.log('Skipping: login failed in before()'); return }
 
       cy.request({
@@ -299,7 +299,7 @@ describe('Redfish Individual Session', () => {
       })
     })
 
-    it('returns 404 for a non-existent session ID', () => {
+    it('returns HTTP 404 for a session ID that does not exist in the system', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/00000000-does-not-exist`,
@@ -310,7 +310,7 @@ describe('Redfish Individual Session', () => {
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/someid`,
@@ -321,8 +321,8 @@ describe('Redfish Individual Session', () => {
     })
   })
 
-  context('DELETE /redfish/v1/SessionService/Sessions/{SessionId}', () => {
-    it('deletes the active session using X-Auth-Token (logout)', () => {
+  context('TC_SESSION_DELETE_BY_ID - DELETE removes active session (logout) and returns 204', () => {
+    it('returns HTTP 204 and removes the active session when using X-Auth-Token header (logout)', () => {
       if (!authToken || !sessionId) { cy.log('Skipping: login failed in before()'); return }
 
       cy.request({
@@ -335,7 +335,7 @@ describe('Redfish Individual Session', () => {
       })
     })
 
-    it('returns 404 when deleting a non-existent session', () => {
+    it('returns HTTP 404 when attempting to delete a session ID that does not exist', () => {
       cy.request({
         method: 'DELETE',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/00000000-does-not-exist`,
@@ -346,7 +346,7 @@ describe('Redfish Individual Session', () => {
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'DELETE',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions/someid`,
@@ -361,9 +361,9 @@ describe('Redfish Individual Session', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Token and session lifecycle edge cases
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish Session - Token Edge Cases', () => {
-  context('garbage token and deleted session token are both rejected with 401', () => {
-    it('returns 401 when X-Auth-Token is invalid/garbage', () => {
+describe('Redfish Session - Token Lifecycle Edge Cases', () => {
+  context('TC_SESSION_TOKEN_VALIDATION - invalid and deleted session tokens are rejected with 401', () => {
+    it('returns HTTP 401 with error body when X-Auth-Token is an invalid or garbage value', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
@@ -375,7 +375,7 @@ describe('Redfish Session - Token Edge Cases', () => {
       })
     })
 
-    it('deleted session token returns 401 or 404 on subsequent GET', () => {
+    it('returns HTTP 401 or 404 when using a token from an already-deleted session', () => {
       let deletedToken: string
       let deletedSessionId: string
 
@@ -420,8 +420,8 @@ describe('Redfish Session - Token Edge Cases', () => {
 // SessionService resource — additional property checks
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish SessionService - Additional Properties', () => {
-  context('ServiceEnabled is true, member count is non-negative and POST to service returns 405', () => {
-    it('GET SessionService returns ServiceEnabled: true', () => {
+  context('TC_SESSIONSERVICE_ADDITIONAL_PROPERTIES - ServiceEnabled state, member count and method restrictions', () => {
+    it('GET SessionService resource returns ServiceEnabled set to true', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService`,
@@ -433,7 +433,7 @@ describe('Redfish SessionService - Additional Properties', () => {
       })
     })
 
-    it('GET Sessions collection has Members@odata.count >= 0', () => {
+    it('Sessions collection returns Members@odata.count as a non-negative integer', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,
@@ -451,7 +451,7 @@ describe('Redfish SessionService - Additional Properties', () => {
       })
     })
 
-    it('POST /redfish/v1/SessionService returns 405 Method Not Allowed', () => {
+    it('returns HTTP 405 Method Not Allowed for POST on /redfish/v1/SessionService', () => {
       cy.request({
         method: 'POST',
         url: `${redfishUrl()}/redfish/v1/SessionService`,
@@ -464,7 +464,7 @@ describe('Redfish SessionService - Additional Properties', () => {
       })
     })
 
-    it('OData-Version header is 4.0 on POST Sessions response', () => {
+    it('POST Sessions response includes OData-Version: 4.0 header on successful login', () => {
       cy.request({
         method: 'POST',
         url: `${redfishUrl()}/redfish/v1/SessionService/Sessions`,

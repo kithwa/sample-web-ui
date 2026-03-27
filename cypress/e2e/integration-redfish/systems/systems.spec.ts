@@ -36,8 +36,8 @@ const systemId = (): string =>
 // GET /redfish/v1/Systems
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Systems Collection - GET /redfish/v1/Systems', () => {
-  context('authenticated GET returns ComputerSystemCollection with OData headers', () => {
-    it('returns ComputerSystemCollection with Basic Auth', () => {
+  context('TC_SYSTEMS_GET_COLLECTION - authenticated GET returns ComputerSystemCollection with OData headers', () => {
+    it('returns ComputerSystemCollection with @odata.type, Members array, and OData headers using Basic Auth', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems`,
@@ -58,7 +58,7 @@ describe('Redfish Systems Collection - GET /redfish/v1/Systems', () => {
       })
     })
 
-    it('returns @odata.id pointing to /redfish/v1/Systems', () => {
+    it('returns @odata.id with value /redfish/v1/Systems in the collection response', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems`,
@@ -70,7 +70,7 @@ describe('Redfish Systems Collection - GET /redfish/v1/Systems', () => {
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems`,
@@ -85,9 +85,9 @@ describe('Redfish Systems Collection - GET /redfish/v1/Systems', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /redfish/v1/Systems/{ComputerSystemId}
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish Individual Computer System - GET /redfish/v1/Systems/{ComputerSystemId}', () => {
-  context('valid UUID returns ComputerSystem or 404; non-UUID system ID returns 400', () => {
-    it('returns 400 for a non-UUID system ID', () => {
+describe('Redfish Computer System - GET /redfish/v1/Systems/{ComputerSystemId}', () => {
+  context('TC_SYSTEM_GET_BY_ID - valid UUID returns ComputerSystem or 404; non-UUID returns 400', () => {
+    it('returns HTTP 400 for a system ID that is not a valid UUID format', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/not-a-valid-uuid`,
@@ -98,7 +98,7 @@ describe('Redfish Individual Computer System - GET /redfish/v1/Systems/{Computer
       })
     })
 
-    it('returns ComputerSystem resource or 404 for a valid UUID system ID', () => {
+    it('returns ComputerSystem resource or HTTP 404 when system ID is a valid UUID', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -114,7 +114,7 @@ describe('Redfish Individual Computer System - GET /redfish/v1/Systems/{Computer
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -129,9 +129,9 @@ describe('Redfish Individual Computer System - GET /redfish/v1/Systems/{Computer
 // ─────────────────────────────────────────────────────────────────────────────
 // PATCH /redfish/v1/Systems/{ComputerSystemId}
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish System Update - PATCH /redfish/v1/Systems/{ComputerSystemId}', () => {
-  context('valid UUID updates boot settings or returns 404; non-UUID returns 400', () => {
-    it('returns 400 for a non-UUID system ID', () => {
+describe('Redfish Computer System - PATCH /redfish/v1/Systems/{ComputerSystemId}', () => {
+  context('TC_SYSTEM_PATCH_BOOT_SETTINGS - valid UUID updates boot settings or returns 404; non-UUID returns 400', () => {
+    it('returns HTTP 400 when PATCH uses a non-UUID system ID', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/not-a-valid-uuid`,
@@ -143,7 +143,7 @@ describe('Redfish System Update - PATCH /redfish/v1/Systems/{ComputerSystemId}',
       })
     })
 
-    it('returns updated ComputerSystem or 404 when patching boot settings', () => {
+    it('returns updated ComputerSystem resource or HTTP 404 when patching Boot settings', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -158,7 +158,7 @@ describe('Redfish System Update - PATCH /redfish/v1/Systems/{ComputerSystemId}',
       })
     })
 
-    it('returns 401 without authentication', () => {
+    it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -174,11 +174,9 @@ describe('Redfish System Update - PATCH /redfish/v1/Systems/{ComputerSystemId}',
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset
 // ─────────────────────────────────────────────────────────────────────────────
-describe(
-  'Redfish System Reset Action - POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset',
-  () => {
-    context('reset request is validated and accepted or rejected based on input and device state', () => {
-      it('returns 400 for a non-UUID system ID', () => {
+describe('Redfish System Reset Action - POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset', () => {
+    context('TC_SYSTEM_RESET_INPUT_VALIDATION - reset request validated and accepted or rejected based on input and device state', () => {
+      it('returns HTTP 400 for a non-UUID system ID in Reset action URL', () => {
         cy.request({
           method: 'POST',
           url: `${redfishUrl()}/redfish/v1/Systems/not-a-valid-uuid/Actions/ComputerSystem.Reset`,
@@ -190,7 +188,7 @@ describe(
         })
       })
 
-      it('returns 400 when ResetType is missing from request body', () => {
+      it('returns HTTP 400 when ResetType field is absent from the Reset request body', () => {
         cy.request({
           method: 'POST',
           url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
@@ -202,7 +200,7 @@ describe(
         })
       })
 
-      it('accepts a valid reset request or returns 404 when device is unavailable', () => {
+      it('returns HTTP 202 Accepted for a valid reset request, or 404/409 when device is unavailable', () => {
         cy.request({
           method: 'POST',
           url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
@@ -223,7 +221,7 @@ describe(
         })
       })
 
-      it('returns 401 without authentication', () => {
+      it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
         cy.request({
           method: 'POST',
           url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
@@ -234,7 +232,7 @@ describe(
         })
       })
 
-      it('returns 400 with Redfish error format for invalid ResetType', () => {
+      it('returns HTTP 400 with Redfish error @Message.ExtendedInfo for an invalid ResetType value', () => {
         cy.request({
           method: 'POST',
           url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
@@ -255,7 +253,7 @@ describe(
 // POST .../Actions/ComputerSystem.Reset — all supported ResetTypes
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish System Reset Action - All ResetTypes', () => {
-  context('each of the five supported ResetTypes returns 202 Accepted or device-unavailable code', () => {
+  context('TC_SYSTEM_RESET_ALL_RESET_TYPES - each supported ResetType returns 202 Accepted or device-unavailable code', () => {
     const cases = [
       { label: 'On',             body: () => systemsFixtures.reset.on },
       { label: 'ForceOff',       body: () => systemsFixtures.reset.forceOff },
@@ -292,8 +290,8 @@ describe('Redfish System Reset Action - All ResetTypes', () => {
 // GET /redfish/v1/Systems/{id} — detailed property assertions (device-guarded)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Computer System - Detailed Properties', () => {
-  context('ComputerSystem resource fields conform to Redfish DSP0268 schema values', () => {
-    it('has valid PowerState enum value', () => {
+  context('TC_SYSTEM_RESOURCE_FIELD_SCHEMA - ComputerSystem resource fields conform to Redfish DSP0268 schema values', () => {
+    it('PowerState field value matches a valid Redfish PowerState enum', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -309,7 +307,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('has valid SystemType enum value', () => {
+    it('SystemType field value matches a valid Redfish SystemType enum', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -325,7 +323,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('has Status object with valid State and Health enum values', () => {
+    it('Status object contains valid State and Health enum values conforming to DSP0268', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -348,7 +346,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('has BiosVersion as a string when present', () => {
+    it('BiosVersion field is a string type when present in the resource', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -364,7 +362,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('has Manufacturer, Model, SerialNumber strings when present', () => {
+    it('Manufacturer, Model, and SerialNumber fields are string type when present', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -385,7 +383,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('has Actions.#ComputerSystem.Reset with correct target URL', () => {
+    it('Actions[#ComputerSystem.Reset] target URL matches the ComputerSystem Reset action path', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -404,7 +402,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('has MemorySummary with valid structure when present', () => {
+    it('MemorySummary contains TotalSystemMemoryGiB as a positive number when present', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -425,7 +423,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('has ProcessorSummary with valid structure when present', () => {
+    it('ProcessorSummary contains Count as positive number and Model as string when present', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -446,7 +444,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('has exact @odata.context, @odata.id, and Id values', () => {
+    it('returns exact @odata.context, @odata.id, and Id values matching the requested system', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -463,7 +461,7 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('returns 404 with error object for valid UUID that does not exist', () => {
+    it('returns HTTP 404 with error object for a valid UUID that has no matching system record', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemsFixtures.nonExistentSystemId}`,
@@ -480,8 +478,8 @@ describe('Redfish Computer System - Detailed Properties', () => {
 // Method Not Allowed on /redfish/v1/Systems/{ComputerSystemId}
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Computer System - Method Not Allowed', () => {
-  context('POST PUT DELETE on /redfish/v1/Systems/{id} return 405 with Redfish error body', () => {
-    it('returns 405 for POST /redfish/v1/Systems/{id}', () => {
+  context('TC_SYSTEM_METHOD_NOT_ALLOWED - POST PUT DELETE on /redfish/v1/Systems/{id} return 405 with Redfish error body', () => {
+    it('returns HTTP 405 with OData-Version header and error body for POST on system resource', () => {
       cy.request({
         method: 'POST',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -495,7 +493,7 @@ describe('Redfish Computer System - Method Not Allowed', () => {
       })
     })
 
-    it('returns 405 for PUT /redfish/v1/Systems/{id}', () => {
+    it('returns HTTP 405 with OData-Version header and error body for PUT on system resource', () => {
       cy.request({
         method: 'PUT',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -509,7 +507,7 @@ describe('Redfish Computer System - Method Not Allowed', () => {
       })
     })
 
-    it('returns 405 for DELETE /redfish/v1/Systems/{id}', () => {
+    it('returns HTTP 405 with OData-Version header and error body for DELETE on system resource', () => {
       cy.request({
         method: 'DELETE',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -527,9 +525,9 @@ describe('Redfish Computer System - Method Not Allowed', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PATCH /redfish/v1/Systems/{ComputerSystemId} — additional validation cases
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish System Update - PATCH additional scenarios', () => {
-  context('BiosSetup target, invalid enum values, empty body and malformed JSON each produce correct status', () => {
-    it('returns 200/404 for BiosSetup boot target', () => {
+describe('Redfish Computer System - PATCH Additional Scenarios', () => {
+  context('TC_SYSTEM_PATCH_ADDITIONAL_SCENARIOS - BiosSetup target, invalid enums, empty body and malformed JSON each produce correct status', () => {
+    it('returns HTTP 200 or 404 when patching BootSourceOverrideTarget to BiosSetup', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -544,7 +542,7 @@ describe('Redfish System Update - PATCH additional scenarios', () => {
       })
     })
 
-    it('returns 400 for invalid BootSourceOverrideTarget', () => {
+    it('returns HTTP 400 for an invalid BootSourceOverrideTarget enum value', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -559,7 +557,7 @@ describe('Redfish System Update - PATCH additional scenarios', () => {
       })
     })
 
-    it('returns 400 for invalid BootSourceOverrideEnabled value', () => {
+    it('returns HTTP 400 for an invalid BootSourceOverrideEnabled enum value', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -574,7 +572,7 @@ describe('Redfish System Update - PATCH additional scenarios', () => {
       })
     })
 
-    it('returns 404 with error for valid UUID that does not exist', () => {
+    it('returns HTTP 404 with error object when PATCH targets a UUID with no matching system', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemsFixtures.nonExistentSystemId}`,
@@ -587,7 +585,7 @@ describe('Redfish System Update - PATCH additional scenarios', () => {
       })
     })
 
-    it('returns 200/400 for empty body PATCH', () => {
+    it('returns HTTP 200, 400, or 404 for a PATCH with an empty JSON body', () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -601,7 +599,7 @@ describe('Redfish System Update - PATCH additional scenarios', () => {
       })
     })
 
-    it('returns 400 for malformed JSON body', () => {
+    it('returns HTTP 400 for a truncated or malformed JSON body in PATCH request', () => {
       // Send raw truncated JSON to trigger parse error
       cy.request({
         method: 'PATCH',
@@ -623,8 +621,8 @@ describe('Redfish System Update - PATCH additional scenarios', () => {
 // GET /redfish/v1/Systems/{id} — optional properties + HEAD + edge IDs
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Computer System - Optional Properties and Method Edge Cases', () => {
-  context('optional string fields are typed correctly and HEAD returns headers-only response', () => {
-    it('Description and HostName are strings when present (Postman #32)', () => {
+  context('TC_SYSTEM_OPTIONAL_FIELDS_AND_HEAD - optional string fields are typed correctly and HEAD returns headers-only response', () => {
+    it('Description and HostName fields are string type when present in the resource', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -642,7 +640,7 @@ describe('Redfish Computer System - Optional Properties and Method Edge Cases', 
       })
     })
 
-    it('HEAD /redfish/v1/Systems/{id} returns 200 or 405 with empty body (Postman #38)', () => {
+    it('returns HTTP 200 with empty body or HTTP 405 for HEAD on the system resource', () => {
       cy.request({
         method: 'HEAD',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
@@ -660,7 +658,7 @@ describe('Redfish Computer System - Optional Properties and Method Edge Cases', 
       })
     })
 
-    it('GET /redfish/v1/Systems/ (empty ID) returns 200 collection or 404 (Postman #39)', () => {
+    it('returns HTTP 200 collection or HTTP 404 for GET with an empty system ID path segment', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/`,
@@ -682,7 +680,7 @@ describe('Redfish Computer System - Optional Properties and Method Edge Cases', 
 // Security / Input Validation Edge Cases  (Postman #42–48)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Computer System - Security Edge Cases', () => {
-  context('XSS, SQL injection, path traversal and oversized IDs all return 400 or 404', () => {
+  context('TC_SYSTEM_INPUT_VALIDATION_SECURITY - XSS, SQL injection, path traversal and oversized IDs all return 400 or 404', () => {
     const badIds: Array<{ label: string; path: string }> = [
       { label: 'XSS attempt',          path: "<script>alert('xss')</script>" },
       { label: 'SQL injection',         path: "' OR '1'='1" },
@@ -715,8 +713,8 @@ describe('Redfish Computer System - Security Edge Cases', () => {
 // Reset — malformed JSON body (Postman #67)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish System Reset Action - Malformed JSON', () => {
-  context('truncated JSON body in Reset request returns 400 Bad Request', () => {
-    it('returns 400 for truncated/malformed JSON in Reset request', () => {
+  context('TC_SYSTEM_RESET_MALFORMED_JSON - truncated JSON body in Reset request returns 400 Bad Request', () => {
+    it('returns HTTP 400 for a truncated or malformed JSON body in Reset action request', () => {
       cy.request({
         method: 'POST',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
@@ -737,8 +735,8 @@ describe('Redfish System Reset Action - Malformed JSON', () => {
 // Authentication — error body structure (Postman #68)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Authentication - Error Body Structure', () => {
-  context('unauthenticated and invalid credential requests return 401 with Redfish error body', () => {
-    it('returns 401 with @Message.ExtendedInfo array on unauthenticated /redfish/v1/Systems', () => {
+  context('TC_AUTH_UNAUTHORIZED_ERROR_STRUCTURE - unauthenticated and invalid credential requests return 401 with Redfish error body', () => {
+    it('returns HTTP 401 with @Message.ExtendedInfo array for unauthenticated request to /redfish/v1/Systems', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems`,
@@ -753,7 +751,7 @@ describe('Redfish Authentication - Error Body Structure', () => {
       })
     })
 
-    it('returns 401 for invalid Basic Auth credentials on /redfish/v1/Systems', () => {
+    it('returns HTTP 401 for request with invalid Basic Auth credentials on /redfish/v1/Systems', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems`,
@@ -770,8 +768,8 @@ describe('Redfish Authentication - Error Body Structure', () => {
 // Error Handling — invalid endpoint (Postman #71)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Error Handling - Invalid Endpoint', () => {
-  context('GET to an undefined Redfish path returns 404 Not Found', () => {
-    it('returns 404 for GET /redfish/v1/InvalidEndpoint', () => {
+  context('TC_ERROR_HANDLING_INVALID_ENDPOINT - GET to an undefined Redfish path returns 404 Not Found', () => {
+    it('returns HTTP 404 for GET to an undefined Redfish endpoint /redfish/v1/InvalidEndpoint', () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/InvalidEndpoint`,
@@ -787,8 +785,8 @@ describe('Redfish Error Handling - Invalid Endpoint', () => {
 // Complete BIOS Reset Flow — PATCH BiosSetup then POST ForceRestart (Postman #58)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Complete BIOS Reset Flow', () => {
-  context('set BiosSetup boot override via PATCH then POST ForceRestart returns 202 Task or device-unavailable', () => {
-    it('PATCH BiosSetup then ForceRestart — 202 Task or device-unavailable', () => {
+  context('TC_SYSTEM_BIOS_RESET_FLOW - set BiosSetup boot override via PATCH then POST ForceRestart returns 202 Task or device-unavailable', () => {
+    it('PATCH BiosSetup boot override then POST ForceRestart returns HTTP 202 Task or device-unavailable code', () => {
       // Step 1: set boot override to BiosSetup
       cy.request({
         method: 'PATCH',
