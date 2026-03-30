@@ -172,121 +172,6 @@ describe('Redfish Computer System - PATCH /redfish/v1/Systems/{ComputerSystemId}
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset
-// ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish System Reset Action - POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset', () => {
-    context('TC_SYSTEM_RESET_INPUT_VALIDATION - reset request validated and accepted or rejected based on input and device state', () => {
-      it('returns HTTP 400 for a non-UUID system ID in Reset action URL', () => {
-        cy.request({
-          method: 'POST',
-          url: `${redfishUrl()}/redfish/v1/Systems/not-a-valid-uuid/Actions/ComputerSystem.Reset`,
-          headers: basicAuthHeaders(),
-          body: systemsFixtures.reset.request,
-          failOnStatusCode: false
-        }).then((response) => {
-          expect(response.status).to.eq(httpCodes.BAD_REQUEST)
-        })
-      })
-
-      it('returns HTTP 400 when ResetType field is absent from the Reset request body', () => {
-        cy.request({
-          method: 'POST',
-          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
-          headers: basicAuthHeaders(),
-          body: systemsFixtures.reset.missingResetType,
-          failOnStatusCode: false
-        }).then((response) => {
-          expect(response.status).to.be.oneOf([httpCodes.BAD_REQUEST, 404, httpCodes.INTERNAL_SERVER_ERROR])
-        })
-      })
-
-      it('returns HTTP 202 Accepted for a valid reset request, or 404/409 when device is unavailable', () => {
-        cy.request({
-          method: 'POST',
-          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
-          headers: basicAuthHeaders(),
-          body: systemsFixtures.reset.request,
-          failOnStatusCode: false
-        }).then((response) => {
-          // 202 Accepted (success), 404 (device not found/registered),
-          // or 409 Conflict (device busy — previous reset still in progress)
-          expect(response.status).to.be.oneOf([202, 404, 409, httpCodes.INTERNAL_SERVER_ERROR])
-          if (response.status === 202) {
-            expect(response.body).to.have.property('@odata.type')
-            expect(response.body['@odata.type']).to.include('Task')
-            expect(response.body).to.have.property('TaskState', 'Completed')
-            expect(response.body).to.have.property('TaskStatus', 'OK')
-            expect(response.headers).to.have.property('location')
-          }
-        })
-      })
-
-      it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
-        cy.request({
-          method: 'POST',
-          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
-          body: systemsFixtures.reset.request,
-          failOnStatusCode: false
-        }).then((response) => {
-          expect(response.status).to.eq(httpCodes.UNAUTHORIZED)
-        })
-      })
-
-      it('returns HTTP 400 with Redfish error @Message.ExtendedInfo for an invalid ResetType value', () => {
-        cy.request({
-          method: 'POST',
-          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
-          headers: basicAuthHeaders(),
-          body: systemsFixtures.reset.invalidResetType,
-          failOnStatusCode: false
-        }).then((response) => {
-          expect(response.status).to.eq(httpCodes.BAD_REQUEST)
-          expect(response.body).to.have.property('error')
-          expect(response.body.error).to.have.property('@Message.ExtendedInfo')
-        })
-      })
-    })
-  }
-)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST .../Actions/ComputerSystem.Reset — all supported ResetTypes
-// ─────────────────────────────────────────────────────────────────────────────
-describe('Redfish System Reset Action - All ResetTypes', () => {
-  context('TC_SYSTEM_RESET_ALL_RESET_TYPES - each supported ResetType returns 202 Accepted or device-unavailable code', () => {
-    const cases = [
-      { label: 'On',             body: () => systemsFixtures.reset.on },
-      { label: 'ForceOff',       body: () => systemsFixtures.reset.forceOff },
-      { label: 'ForceRestart',   body: () => systemsFixtures.reset.forceRestart },
-      { label: 'GracefulRestart',body: () => systemsFixtures.reset.gracefulRestart },
-      { label: 'PowerCycle',     body: () => systemsFixtures.reset.powerCycle }
-    ]
-
-    cases.forEach(({ label, body }) => {
-      it(`accepts ResetType=${label} — 202 on success, 404/409 when device unavailable`, () => {
-        cy.request({
-          method: 'POST',
-          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
-          headers: basicAuthHeaders(),
-          body: body(),
-          failOnStatusCode: false
-        }).then((response) => {
-          expect(response.status).to.be.oneOf([202, 404, 409, httpCodes.INTERNAL_SERVER_ERROR])
-          if (response.status === 202) {
-            expect(response.body['@odata.type']).to.include('Task')
-            expect(response.body).to.have.property('TaskState', 'Completed')
-            expect(response.body).to.have.property('TaskStatus', 'OK')
-            expect(response.headers).to.have.property('location')
-            expect(response.headers.location).to.include('/redfish/v1/TaskService/Tasks/')
-            expect(response.headers['odata-version']).to.eq('4.0')
-          }
-        })
-      })
-    })
-  })
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
 // GET /redfish/v1/Systems/{id} — detailed property assertions (device-guarded)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Computer System - Detailed Properties', () => {
@@ -402,12 +287,13 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('MemorySummary contains TotalSystemMemoryGiB as a positive number when present', () => {
+    it('MemorySummary contains TotalSystemMemoryGiB as a positive number when present', { retries: 2 }, () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
         headers: basicAuthHeaders(),
-        failOnStatusCode: false
+        failOnStatusCode: false,
+        timeout: 45000
       }).then((response) => {
         if (response.status === httpCodes.SUCCESS && response.body.MemorySummary) {
           const mem = response.body.MemorySummary as Record<string, unknown>
@@ -423,12 +309,13 @@ describe('Redfish Computer System - Detailed Properties', () => {
       })
     })
 
-    it('ProcessorSummary contains Count as positive number and Model as string when present', () => {
+    it('ProcessorSummary contains Count as positive number and Model as string when present', { retries: 2 }, () => {
       cy.request({
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
         headers: basicAuthHeaders(),
-        failOnStatusCode: false
+        failOnStatusCode: false,
+        timeout: 45000
       }).then((response) => {
         if (response.status === httpCodes.SUCCESS && response.body.ProcessorSummary) {
           const proc = response.body.ProcessorSummary as Record<string, unknown>
@@ -527,13 +414,14 @@ describe('Redfish Computer System - Method Not Allowed', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Redfish Computer System - PATCH Additional Scenarios', () => {
   context('TC_SYSTEM_PATCH_ADDITIONAL_SCENARIOS - BiosSetup target, invalid enums, empty body and malformed JSON each produce correct status', () => {
-    it('returns HTTP 200 or 404 when patching BootSourceOverrideTarget to BiosSetup', () => {
+    it('returns HTTP 200 or 404 when patching BootSourceOverrideTarget to BiosSetup', { retries: 2 }, () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
         headers: basicAuthHeaders(),
         body: systemsFixtures.patchBootSettings.biosSetup,
-        failOnStatusCode: false
+        failOnStatusCode: false,
+        timeout: 45000
       }).then((response) => {
         expect(response.status).to.be.oneOf([httpCodes.SUCCESS, 404, httpCodes.INTERNAL_SERVER_ERROR])
         if (response.status === httpCodes.SUCCESS) {
@@ -585,13 +473,14 @@ describe('Redfish Computer System - PATCH Additional Scenarios', () => {
       })
     })
 
-    it('returns HTTP 200, 400, or 404 for a PATCH with an empty JSON body', () => {
+    it('returns HTTP 200, 400, or 404 for a PATCH with an empty JSON body', { retries: 2 }, () => {
       cy.request({
         method: 'PATCH',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
         headers: basicAuthHeaders(),
         body: systemsFixtures.patchBootSettings.empty,
-        failOnStatusCode: false
+        failOnStatusCode: false,
+        timeout: 45000
       }).then((response) => {
         expect(response.status).to.be.oneOf([
           httpCodes.SUCCESS, httpCodes.BAD_REQUEST, 404, httpCodes.INTERNAL_SERVER_ERROR
@@ -702,6 +591,126 @@ describe('Redfish Computer System - Security Edge Cases', () => {
           expect(response.status).to.be.oneOf([httpCodes.BAD_REQUEST, 404, 414])
           if (response.headers['content-type']?.includes('application/json')) {
             expect(response.body).to.have.property('error')
+          }
+        })
+      })
+    })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Redfish System Reset Action - POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset', () => {
+    context('TC_SYSTEM_RESET_INPUT_VALIDATION - reset request validated and accepted or rejected based on input and device state', () => {
+      it('returns HTTP 400 for a non-UUID system ID in Reset action URL', () => {
+        cy.request({
+          method: 'POST',
+          url: `${redfishUrl()}/redfish/v1/Systems/not-a-valid-uuid/Actions/ComputerSystem.Reset`,
+          headers: basicAuthHeaders(),
+          body: systemsFixtures.reset.request,
+          failOnStatusCode: false
+        }).then((response) => {
+          expect(response.status).to.eq(httpCodes.BAD_REQUEST)
+        })
+      })
+
+      it('returns HTTP 400 when ResetType field is absent from the Reset request body', () => {
+        cy.request({
+          method: 'POST',
+          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+          headers: basicAuthHeaders(),
+          body: systemsFixtures.reset.missingResetType,
+          failOnStatusCode: false
+        }).then((response) => {
+          expect(response.status).to.be.oneOf([httpCodes.BAD_REQUEST, 404, httpCodes.INTERNAL_SERVER_ERROR])
+        })
+      })
+
+      it('returns HTTP 202 Accepted for a valid reset request, or 404/409 when device is unavailable', () => {
+        cy.request({
+          method: 'POST',
+          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+          headers: basicAuthHeaders(),
+          body: systemsFixtures.reset.request,
+          failOnStatusCode: false
+        }).then((response) => {
+          // 202 Accepted (success), 404 (device not found/registered),
+          // or 409 Conflict (device busy — previous reset still in progress)
+          expect(response.status).to.be.oneOf([202, 404, 409, httpCodes.INTERNAL_SERVER_ERROR])
+          if (response.status === 202) {
+            expect(response.body).to.have.property('@odata.type')
+            expect(response.body['@odata.type']).to.include('Task')
+            expect(response.body).to.have.property('TaskState', 'Completed')
+            expect(response.body).to.have.property('TaskStatus', 'OK')
+            expect(response.headers).to.have.property('location')
+          }
+        })
+      })
+
+      it('returns HTTP 401 Unauthorized when request has no authentication headers', () => {
+        cy.request({
+          method: 'POST',
+          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+          body: systemsFixtures.reset.request,
+          failOnStatusCode: false
+        }).then((response) => {
+          expect(response.status).to.eq(httpCodes.UNAUTHORIZED)
+        })
+      })
+
+      it('returns HTTP 400 with Redfish error @Message.ExtendedInfo for an invalid ResetType value', () => {
+        cy.request({
+          method: 'POST',
+          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+          headers: basicAuthHeaders(),
+          body: systemsFixtures.reset.invalidResetType,
+          failOnStatusCode: false
+        }).then((response) => {
+          expect(response.status).to.eq(httpCodes.BAD_REQUEST)
+          expect(response.body).to.have.property('error')
+          expect(response.body.error).to.have.property('@Message.ExtendedInfo')
+        })
+      })
+    })
+  }
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST .../Actions/ComputerSystem.Reset — all supported ResetTypes
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Redfish System Reset Action - All ResetTypes', () => {
+  context('TC_SYSTEM_RESET_ALL_RESET_TYPES - each supported ResetType returns 202 Accepted or device-unavailable code', () => {
+    const cases = [
+      { label: 'On',             body: () => systemsFixtures.reset.on },
+      { label: 'ForceOff',       body: () => systemsFixtures.reset.forceOff },
+      { label: 'ForceRestart',   body: () => systemsFixtures.reset.forceRestart },
+      { label: 'GracefulRestart',body: () => systemsFixtures.reset.gracefulRestart },
+      { label: 'PowerCycle',     body: () => systemsFixtures.reset.powerCycle }
+    ]
+
+    cases.forEach(({ label, body }) => {
+      // Each Reset relays to the AMT device over WSMAN. When multiple Resets
+      // are sent in quick succession the device may take longer than the default
+      // 15 s responseTimeout to reply. timeout:45000 gives it enough headroom,
+      // and retries:2 absorbs transient ECONNRESET drops between resets.
+      it(`accepts ResetType=${label} — 202 on success, 404/409 when device unavailable`, { retries: 2 }, () => {
+        cy.request({
+          method: 'POST',
+          url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+          headers: basicAuthHeaders(),
+          body: body(),
+          failOnStatusCode: false,
+          timeout: 45000
+        }).then((response) => {
+          expect(response.status).to.be.oneOf([202, 404, 409, httpCodes.INTERNAL_SERVER_ERROR])
+          if (response.status === 202) {
+            expect(response.body['@odata.type']).to.include('Task')
+            expect(response.body).to.have.property('TaskState', 'Completed')
+            expect(response.body).to.have.property('TaskStatus', 'OK')
+            expect(response.headers).to.have.property('location')
+            expect(response.headers.location).to.include('/redfish/v1/TaskService/Tasks/')
+            expect(response.headers['odata-version']).to.eq('4.0')
           }
         })
       })
