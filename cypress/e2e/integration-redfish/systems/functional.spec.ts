@@ -110,9 +110,22 @@ describe('Functional Test - Redfish System Power Cycle - POST /redfish/v1/System
       loggedRequest(`POLL→"${targetState}"`, {
         method: 'GET',
         url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
-        headers: basicAuthHeaders()
+        headers: basicAuthHeaders(),
+        failOnStatusCode: false
       }).then((response) => {
-        expect(response.status).to.eq(httpCodes.SUCCESS)
+        // During boot the device may return 5xx (WSMAN unreachable) — treat as
+        // transient and keep polling rather than failing the test immediately.
+        if (response.status !== httpCodes.SUCCESS) {
+          cy.task('log', `    ⏳ Transient HTTP ${response.status} — device still booting, retrying …`)
+          if (Date.now() >= deadline) {
+            throw new Error(
+              `Timed out waiting for PowerState="${targetState}". Last poll returned HTTP ${response.status}`
+            )
+          }
+          cy.wait(POLL_INTERVAL_MS)
+          pollPowerState(targetState, deadline)
+          return
+        }
         const current = (response.body as Record<string, string>).PowerState
         cy.task('log', `    PowerState: "${current}" (target: "${targetState}")`)
         if (current === targetState) {
@@ -136,86 +149,119 @@ describe('Functional Test - Redfish System Power Cycle - POST /redfish/v1/System
       cy.task('log', '════════════════════════════════════════════════════════')
 
       // ── Pre-flight: ensure device is reachable and PowerState = "On" ────────
-      // Handles consecutive runs where the device may still be booting.
-      cy.task('log', '\n── Pre-flight: check device reachability & PowerState ──')
-      loggedRequest('Pre-flight GET', {
-        method: 'GET',
-        url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
-        headers: basicAuthHeaders()
-      }).then((preflight) => {
-        if (preflight.status !== httpCodes.SUCCESS) {
-          cy.task('log', `  ⚠️  Device unavailable (HTTP ${preflight.status}) — skipping test`)
-          cy.log(`⚠️  Device unavailable — skipping`)
-          this.skip()
-          return
-        }
-
-        const preState = (preflight.body as Record<string, string>).PowerState
-        cy.task('log', `  Current PowerState: "${preState}"`)
-
-        if (preState !== 'On') {
-          cy.task('log', `  Not "On" yet — polling up to 2 min before starting …`)
-          pollPowerState('On', Date.now() + POWER_ON_TIMEOUT_MS)
-        }
-
-        // ── Step 1: Confirm PowerState is "On" ──────────────────────────────
-        cy.task('log', '\n── Step 1: Confirm PowerState is "On" ──────────────────')
-        loggedRequest('Step 1 GET', {
+      // Retries on transient 5xx (device recovering from a previous Reset barrage).
+      // Skips immediately only on 4xx (device not registered).
+      // If device is powered off, sends ResetType=On then polls until "On".
+      const attemptPreFlight = (deadline: number): void => {
+        cy.task('log', '\n── Pre-flight: check device reachability & PowerState ──')
+        loggedRequest('Pre-flight GET', {
           method: 'GET',
           url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
-          headers: basicAuthHeaders()
-        }).then((step1) => {
-          expect(step1.body, 'Step 1: PowerState must be "On"').to.have.property('PowerState', 'On')
-          cy.task('log', '  ✅ PowerState confirmed: "On"')
+          headers: basicAuthHeaders(),
+          failOnStatusCode: false
+        }).then((preflight) => {
+          // Transient 5xx — device may be recovering from previous test's Reset commands.
+          // Retry until the deadline rather than skipping immediately.
+          if (preflight.status >= 500) {
+            cy.task('log', `  ⏳ Pre-flight HTTP ${preflight.status} — device recovering, retrying in ${POLL_INTERVAL_MS / 1000}s …`)
+            if (Date.now() >= deadline) {
+              cy.task('log', `  ⚠️  Pre-flight deadline exceeded after repeated ${preflight.status} — skipping test`)
+              this.skip()
+              return
+            }
+            cy.wait(POLL_INTERVAL_MS)
+            attemptPreFlight(deadline)
+            return
+          }
 
-          // ── Step 2: POST ForceOff ──────────────────────────────────────────
-          cy.task('log', '\n── Step 2: POST ForceOff ────────────────────────────────')
-          loggedRequest('Step 2 ForceOff', {
-            method: 'POST',
-            url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
-            headers: basicAuthHeaders(),
-            body: systemsFixtures.reset.forceOff
-          }).then((step2) => {
-            expect(step2.status, 'Step 2: ForceOff must return 202').to.eq(202)
-            cy.task('log', '  ✅ ForceOff accepted (202)')
+          if (preflight.status !== httpCodes.SUCCESS) {
+            cy.task('log', `  ⚠️  Device unavailable (HTTP ${preflight.status}) — skipping test`)
+            this.skip()
+            return
+          }
 
-            // ── Step 3: Poll until PowerState = "Off" (max 60 s) ───────────
-            // ForceOff is a hard power cut — the device loses power within seconds.
-            cy.task('log', '\n── Step 3: Poll for PowerState="Off" (max 60 s) ─────────')
-            pollPowerState('Off', Date.now() + POWER_OFF_TIMEOUT_MS)
+          const preState = (preflight.body as Record<string, string>).PowerState
+          cy.task('log', `  Current PowerState: "${preState}"`)
 
-            // ── Step 4: 10-second settle wait ─────────────────────────────
-            cy.task('log', '\n── Step 4: 10-second settle wait ────────────────────────')
-            cy.wait(10_000)
-            cy.task('log', '  ✅ Settle wait complete')
-
-            // ── Step 5: POST On ────────────────────────────────────────────
-            cy.task('log', '\n── Step 5: POST On ──────────────────────────────────────')
-            loggedRequest('Step 5 On', {
+          if (preState !== 'On') {
+            cy.task('log', `  Device is "${preState}" — sending ResetType=On to power it up …`)
+            loggedRequest('Pre-flight PowerOn', {
               method: 'POST',
               url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
               headers: basicAuthHeaders(),
-              body: systemsFixtures.reset.on
-            }).then((step5) => {
-              expect(step5.status, 'Step 5: Power On must return 202').to.eq(202)
-              cy.task('log', '  ✅ Power On accepted (202)')
+              body: { ResetType: 'On' },
+              failOnStatusCode: false
+            }).then((powerOnResp) => {
+              if (powerOnResp.status === 202) {
+                cy.task('log', `  ✅ Power-on command accepted (202) — waiting for PowerState="On" …`)
+              } else {
+                cy.task('log', `  ⚠️  Power-on command returned HTTP ${powerOnResp.status} — will still poll …`)
+              }
+              pollPowerState('On', Date.now() + POWER_ON_TIMEOUT_MS)
+            })
+          }
 
-              // ── Step 6: Fixed 3-minute boot wait ────────────────────────
-              cy.task('log', '\n── Step 6: Fixed 3-minute boot wait ─────────────────────')
-              cy.wait(3 * 60 * 1000)
-              cy.task('log', '  ✅ Boot wait complete')
+          // ── Step 1: Confirm PowerState is "On" ──────────────────────────────
+          cy.task('log', '\n── Step 1: Confirm PowerState is "On" ──────────────────')
+          loggedRequest('Step 1 GET', {
+            method: 'GET',
+            url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}`,
+            headers: basicAuthHeaders()
+          }).then((step1) => {
+            expect(step1.body, 'Step 1: PowerState must be "On"').to.have.property('PowerState', 'On')
+            cy.task('log', '  ✅ PowerState confirmed: "On"')
 
-              // ── Step 7: Poll until PowerState = "On" (max 3 min) ────────
-              cy.task('log', '\n── Step 7: Poll for PowerState="On" (max 3 min) ────────')
-              pollPowerState('On')
+            // ── Step 2: POST ForceOff ──────────────────────────────────────────
+            cy.task('log', '\n── Step 2: POST ForceOff ────────────────────────────────')
+            loggedRequest('Step 2 ForceOff', {
+              method: 'POST',
+              url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+              headers: basicAuthHeaders(),
+              body: systemsFixtures.reset.forceOff
+            }).then((step2) => {
+              expect(step2.status, 'Step 2: ForceOff must return 202').to.eq(202)
+              cy.task('log', '  ✅ ForceOff accepted (202)')
 
-              cy.task('log', '\n════════════════════════════════════════════════════════')
-              cy.task('log', ' ✅ TEST PASSED: Power cycle complete')
-              cy.task('log', '════════════════════════════════════════════════════════')
+              // ── Step 3: Poll until PowerState = "Off" (max 60 s) ───────────
+              // ForceOff is a hard power cut — the device loses power within seconds.
+              cy.task('log', '\n── Step 3: Poll for PowerState="Off" (max 60 s) ─────────')
+              pollPowerState('Off', Date.now() + POWER_OFF_TIMEOUT_MS)
+
+              // ── Step 4: 10-second settle wait ─────────────────────────────
+              cy.task('log', '\n── Step 4: 10-second settle wait ────────────────────────')
+              cy.wait(10_000)
+              cy.task('log', '  ✅ Settle wait complete')
+
+              // ── Step 5: POST On ────────────────────────────────────────────
+              cy.task('log', '\n── Step 5: POST On ──────────────────────────────────────')
+              loggedRequest('Step 5 On', {
+                method: 'POST',
+                url: `${redfishUrl()}/redfish/v1/Systems/${systemId()}/Actions/ComputerSystem.Reset`,
+                headers: basicAuthHeaders(),
+                body: systemsFixtures.reset.on
+              }).then((step5) => {
+                expect(step5.status, 'Step 5: Power On must return 202').to.eq(202)
+                cy.task('log', '  ✅ Power On accepted (202)')
+
+                // ── Step 6: Fixed 3-minute boot wait ────────────────────────
+                cy.task('log', '\n── Step 6: Fixed 3-minute boot wait ─────────────────────')
+                cy.wait(3 * 60 * 1000)
+                cy.task('log', '  ✅ Boot wait complete')
+
+                // ── Step 7: Poll until PowerState = "On" (max 3 min) ────────
+                cy.task('log', '\n── Step 7: Poll for PowerState="On" (max 3 min) ────────')
+                pollPowerState('On')
+
+                cy.task('log', '\n════════════════════════════════════════════════════════')
+                cy.task('log', ' ✅ TEST PASSED: Power cycle complete')
+                cy.task('log', '════════════════════════════════════════════════════════')
+              })
             })
           })
         })
-      })
+      }
+
+      attemptPreFlight(Date.now() + 2 * 60 * 1000)
     })
   })
 })

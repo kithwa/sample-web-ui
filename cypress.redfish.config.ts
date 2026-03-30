@@ -63,7 +63,7 @@ export default defineConfig({
     REDFISH_PASSWORD: 'G@ppm0ym',
     // Optional: a real registered AMT device UUID for Systems tests.
     // If not set, device-specific tests gracefully accept 404.
-    REDFISH_SYSTEM_ID: '15ccd72c-46ac-4991-a8d1-ef2e89e3a453'
+    REDFISH_SYSTEM_ID: '5a020a2f-a021-4cfd-b3d5-91b369f0a48f'
   },
 
   // API-only tests: no browser launch strictly needed, but Cypress still
