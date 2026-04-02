@@ -4,7 +4,7 @@
  **********************************************************************/
 
 import { Component, OnInit, inject, signal, input, DestroyRef } from '@angular/core'
-import { catchError, finalize, switchMap } from 'rxjs/operators'
+import { catchError, finalize, switchMap, timeout } from 'rxjs/operators'
 import { MatSnackBar } from '@angular/material/snack-bar'
 import { Router } from '@angular/router'
 import { Observable, of, forkJoin } from 'rxjs'
@@ -212,17 +212,32 @@ export class DeviceToolbarComponent implements OnInit {
   }
 
   getPowerState(): void {
+    const previousPowerState = this.powerState()
     this.isLoading().set(true)
-    this.devicesService.getPowerState(this.deviceId()).subscribe((powerState) => {
-      this.powerState.set(
-        powerState.powerstate.toString() === '2'
-          ? 'deviceToolbar.power.on.value'
-          : powerState.powerstate.toString() === '3' || powerState.powerstate.toString() === '4'
-            ? 'deviceToolbar.power.sleep.value'
-            : 'deviceToolbar.power.off.value'
+    this.devicesService
+      .getPowerState(this.deviceId())
+      .pipe(
+        timeout(10000),
+        finalize(() => {
+          this.isLoading().set(false)
+        })
       )
-      this.isLoading().set(false)
-    })
+      .subscribe({
+        next: (powerState) => {
+          this.powerState.set(
+            powerState.powerstate.toString() === '2'
+              ? 'deviceToolbar.power.on.value'
+              : powerState.powerstate.toString() === '3' || powerState.powerstate.toString() === '4'
+                ? 'deviceToolbar.power.sleep.value'
+                : 'deviceToolbar.power.off.value'
+          )
+        },
+        error: () => {
+          // Preserve the last known state if refresh fails or times out.
+          // Most importantly, finalize() will clear isLoading so the icon is not hidden indefinitely.
+          this.powerState.set(previousPowerState)
+        }
+      })
   }
 
   getDeviceCert(): void {
